@@ -1,0 +1,104 @@
+/* Fonts */
+@font-face { font-family: 'Zen Kaku Gothic New'; font-weight: 400; font-display: swap; src: url('./fonts/gothic-400.woff2') format('woff2'); }
+@font-face { font-family: 'Zen Kaku Gothic New'; font-weight: 500; font-display: swap; src: url('./fonts/gothic-500.woff2') format('woff2'); }
+@font-face { font-family: 'Zen Old Mincho'; font-weight: 500; font-display: swap; src: url('./fonts/mincho-500.woff2') format('woff2'); unicode-range: U+0000-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2026; }
+@font-face { font-family: 'Zen Old Mincho'; font-weight: 500; font-display: swap; src: url('./fonts/mincho-ext-500.woff2') format('woff2'); unicode-range: U+0100-017F; }
+@font-face { font-family: 'Zen Old Mincho'; font-weight: 500; font-display: swap; src: url('./fonts/mincho-6e08.woff2') format('woff2'); unicode-range: U+6E08; }
+@font-face { font-family: 'Zen Old Mincho'; font-weight: 500; font-display: swap; src: url('./fonts/mincho-512a.woff2') format('woff2'); unicode-range: U+512A; }
+@font-face { font-family: 'Zen Old Mincho'; font-weight: 500; font-display: swap; src: url('./fonts/mincho-52dd.woff2') format('woff2'); unicode-range: U+52DD; }
+@font-face { font-family: 'DotGothic16'; font-display: swap; src: url('./fonts/pixel-58f1.woff2') format('woff2'); unicode-range: U+58F1; }
+@font-face { font-family: 'DotGothic16'; font-display: swap; src: url('./fonts/pixel-5f10.woff2') format('woff2'); unicode-range: U+5F10; }
+@font-face { font-family: 'DotGothic16'; font-display: swap; src: url('./fonts/pixel-53c2.woff2') format('woff2'); unicode-range: U+53C2; }
+@font-face { font-family: 'DotGothic16'; font-display: swap; src: url('./fonts/pixel-8086.woff2') format('woff2'); unicode-range: U+8086; }
+@font-face { font-family: 'DSEG7'; font-weight: 700; font-display: swap; src: url('./fonts/dseg7-bold.woff2') format('woff2'); }
+
+:root {
+  /* Paper: the phones */
+  --paper: #f5f2ea;
+  --field: #fbf9f3;
+  --ink: #2a2926;
+  --ink-2: #66635a;
+  --hair: #ddd8cb;
+  --field-border: #8e8a7e;
+
+  /* Panel: the TV */
+  --charcoal: #1b1c1a;
+  --panel-ink: #ece8dd;
+  --panel-ink-2: #a5a297;
+  --panel-hair: #34352f;
+  --celadon: #a9cfc4;
+
+  /* The timer is the one vibrant element */
+  --sun-1: #f4be55;
+  --sun-2: #ef8430;
+  --sun-3: #d23c1e;
+  --digit: #f7f3e8;
+  --digit-last: #ff9a6b;
+
+  /* Accent: only the real answer, the seal and errors */
+  --accent: #a8452f;
+  --accent-on-dark: #d98b6f;
+  --error: #8f3a26;
+
+  --font-body: 'Zen Kaku Gothic New', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  --font-stage: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Noto Serif JP', Georgia, serif;
+  --font-digit: 'DSEG7', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-pixel: 'DotGothic16', 'Zen Old Mincho', serif;
+
+  --ease-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-surface='panel'] body {
+  background: var(--charcoal);
+  color: var(--panel-ink);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+  font-weight: inherit;
+  font-size: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

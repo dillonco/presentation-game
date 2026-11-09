@@ -1,0 +1,774 @@
+/* The page itself never scrolls behind the keyboard. Each screen scrolls only its own list. */
+html[data-surface='paper'],
+html[data-surface='paper'] body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Set from visualViewport, because iOS Safari doesn't resize the page for the keyboard. */
+  height: var(--app-h, 100dvh);
+  transform: translateY(var(--app-top, 0));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) 16px 6px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font-size: 14px;
+  text-align: center;
+}
+
+.sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) max(16px, env(safe-area-inset-right, 0px))
+    calc(env(safe-area-inset-bottom, 0px) + 16px) max(16px, env(safe-area-inset-left, 0px));
+}
+
+.kicker {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.deck-title {
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.masthead {
+  flex: none;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--hair);
+}
+
+/* Join: everything sits in the top of the screen, so the keyboard opens below it. */
+.join-form {
+  display: block;
+}
+
+/* The front page on a hosted server: join by code, or make a space. */
+.code-input {
+  font-family: var(--font-stage);
+  font-size: 28px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.home-host {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--hair);
+}
+
+.home-host-title {
+  font-family: var(--font-stage);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.home-host-body {
+  margin: 8px 0 16px;
+  color: var(--ink-2);
+}
+
+.server-sign-in {
+  margin-top: 40px;
+  color: var(--ink-2);
+}
+
+.server-sign-in summary {
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+/* A one-sentence screen: joined, removed, not found and so on. */
+.notice {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.notice-title {
+  font-family: var(--font-stage);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.notice-body {
+  color: var(--ink-2);
+}
+
+.waiting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.waiting-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.waiting-name {
+  font-family: var(--font-stage);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.waiting-stamp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.waiting-foot {
+  letter-spacing: 0.04em;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.game-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.game-numeral {
+  font-family: var(--font-pixel);
+  font-size: 72px;
+  line-height: 1;
+}
+
+/* The one part that scrolls, so a long list can never squeeze the button above it. */
+.admin-rooms {
+  flex: 1;
+  min-height: 0;
+  margin-top: 32px;
+  overflow-y: auto;
+}
+
+.admin-rooms ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-rooms li {
+  border-top: 1px solid var(--hair);
+}
+
+.admin-rooms a {
+  display: block;
+  padding: 12px 0;
+  color: var(--ink);
+}
+
+@media (max-height: 480px) {
+  .masthead {
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+
+  .deck-title {
+    font-size: 24px;
+  }
+
+  .sheet {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+  }
+}
+
+/* A timed round: strip, prompt, field, status and button, stacked in the top of the screen. */
+.round {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: size;
+}
+
+.round-pad {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 16px)
+    max(16px, env(safe-area-inset-left, 0px));
+  position: relative;
+}
+
+/*
+ * A photo round's photo. The TV has it full size, so this gives way before anything else as the
+ * keyboard takes up the screen, and on the very smallest phones it steps aside altogether.
+ */
+.photo-thumb {
+  flex: 0 1000 148px;
+  min-height: 64px;
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.photo-thumb:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.photo-thumb.vote {
+  flex-basis: 104px;
+}
+
+.photo-thumb img,
+.photo-large img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.photo-thumb .photo-hint {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font-size: 14px;
+}
+
+.photo-missing {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+div.photo-thumb {
+  cursor: default;
+}
+
+@container (max-height: 348px) {
+  .photo-thumb {
+    display: none;
+  }
+}
+
+/* Below the timer, so the time left stays in sight. */
+.photo-large {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  cursor: zoom-out;
+}
+
+.photo-large:focus-visible {
+  outline: 2px solid var(--panel-ink);
+  outline-offset: -4px;
+}
+
+.photo-large .photo-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: var(--charcoal);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.photo-fade {
+  animation: photo-in 0.25s ease-out both;
+}
+
+@keyframes photo-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-fade { animation: none; }
+}
+
+.round-prompt {
+  flex: none;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Pick one's question sits under the photo, so it's a sentence rather than a single word. */
+.round-prompt.choice-question {
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.round-label {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.round-count {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* The first thing to give way on the very smallest screens, so Send stays visible. */
+textarea.round-field {
+  flex: 0 1 124px;
+  min-height: 56px;
+  overflow-y: auto;
+}
+
+/* Scrolls on its own, so the button stays pinned below it. */
+.vote-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -4px;
+  padding: 2px 4px 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.result-points {
+  font-family: var(--font-digit);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* Where was this? The map fills everything below the timer, right to the bottom edge. */
+.map-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #c7d3d0;
+}
+
+.map-stage .map-fallback {
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Always reserved, so the button can't move, and solid, so the status stays readable. */
+.map-foot {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 16px)
+    max(16px, env(safe-area-inset-left, 0px));
+  background: var(--paper);
+  border-top: 1px solid var(--hair);
+}
+
+.map-keys {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Raised, like the option boxes: the ledge disappears and the edges stay put when pressed. */
+.map-key {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--field-border, #8e8a7e);
+  border-radius: 6px;
+  background: linear-gradient(#fbf9f3, #efebdf);
+  box-shadow: inset 0 1px 0 #fff, 0 2px 0 #8e8a7e;
+  color: var(--ink);
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.map-key.wide {
+  width: auto;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.map-key:active {
+  box-shadow: inset 0 2px 4px rgba(42, 41, 38, 0.3);
+}
+
+.map-key:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.photo-thumb.on-map {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  width: 112px;
+  height: 84px;
+  flex: none;
+  min-height: 0;
+  margin: 0;
+  box-shadow: 0 1px 4px rgba(42, 41, 38, 0.4);
+}
+
+.map-stage .photo-large {
+  z-index: 4;
+}
+
+/* Sits just above the floating status and button, always readable. */
+.map-stage .maplibregl-ctrl-bottom-left {
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+}
+
+.map-stage .maplibregl-ctrl-attrib,
+.tv-map .maplibregl-ctrl-attrib {
+  background: rgba(245, 242, 234, 0.9);
+  color: #66635a;
+  font-size: 11px;
+}
+
+.map-stage .maplibregl-ctrl-attrib a,
+.tv-map .maplibregl-ctrl-attrib a {
+  color: #66635a;
+  text-decoration: underline;
+}
+
+.result-unit {
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+}
+
+/* Final place: a medal for the top three, once that place is on the TV */
+.medal {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  color: var(--ink);
+  font-family: var(--font-stage);
+  font-size: 44px;
+  font-weight: 500;
+  line-height: 1;
+  animation: medal-in 0.45s var(--ease-soft) both;
+}
+
+.medal-1 {
+  background: radial-gradient(circle at 34% 28%, #f7e7a8, #d4ae4f 58%, #8c6a1f);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.35), 0 2px 0 #8c6a1f, 0 0 28px rgba(212, 174, 79, 0.55);
+}
+
+.medal-2 {
+  background: radial-gradient(circle at 34% 28%, #f4f4f1, #bfc0bb 58%, #7c7e79);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.4), 0 2px 0 #7c7e79, 0 0 20px rgba(150, 152, 147, 0.4);
+}
+
+.medal-3 {
+  background: radial-gradient(circle at 34% 28%, #f3c9a0, #bd7d4c 58%, #7c4a27);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.3), 0 2px 0 #7c4a27, 0 0 20px rgba(189, 125, 76, 0.4);
+}
+
+.medal-winner {
+  color: var(--accent);
+  font-family: var(--font-stage);
+  font-size: 19px;
+  letter-spacing: 0.06em;
+}
+
+@keyframes medal-in {
+  from { opacity: 0; transform: scale(1.4); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medal { animation: none; }
+}
+
+/*
+ * A pale watercolour sky behind every phone screen: a blue wash at the top, a few clouds
+ * drifting by, and soft hills at the foot. Kept faint, so text and buttons read as before.
+ */
+.shell {
+  isolation: isolate;
+  background: linear-gradient(180deg, #d9e8ef 0%, #e6eeec 18%, var(--paper) 42%);
+}
+
+.shell::before,
+.shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.shell::before {
+  top: 0;
+  width: 200%;
+  height: 160px;
+  background-image:
+    radial-gradient(ellipse 46px 16px at 12% 46px, rgba(255, 255, 255, 0.95) 55%, transparent 78%),
+    radial-gradient(ellipse 30px 13px at 16% 36px, rgba(255, 255, 255, 0.95) 55%, transparent 78%),
+    radial-gradient(ellipse 60px 18px at 36% 92px, rgba(255, 255, 255, 0.8) 55%, transparent 78%),
+    radial-gradient(ellipse 34px 14px at 39% 80px, rgba(255, 255, 255, 0.8) 55%, transparent 78%),
+    radial-gradient(ellipse 42px 14px at 72% 30px, rgba(255, 255, 255, 0.9) 55%, transparent 78%),
+    radial-gradient(ellipse 26px 11px at 75% 22px, rgba(255, 255, 255, 0.9) 55%, transparent 78%);
+  background-size: 50% 100%;
+  background-repeat: repeat-x;
+  animation: phone-clouds 90s linear infinite;
+}
+
+.shell::after {
+  bottom: 0;
+  width: 100%;
+  height: 110px;
+  background:
+    radial-gradient(ellipse 75% 100% at 18% 100%, rgba(128, 176, 120, 0.22) 0 62%, transparent 63%),
+    radial-gradient(ellipse 85% 80% at 88% 100%, rgba(98, 152, 104, 0.2) 0 62%, transparent 63%);
+}
+
+@keyframes phone-clouds {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell::before { animation: none; }
+}
+
+/* Trip tips: a list to take home, a map, and one button that copies it all */
+.tips-sheet {
+  padding-bottom: 0;
+}
+
+.tips-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -16px;
+  padding: 0 16px 16px;
+}
+
+.tips-masthead {
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.tips-phone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tips-phone-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--field);
+  /* Long-press still selects, for a phone where copying isn't allowed. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tips-phone-photo {
+  display: block;
+  width: calc(100% + 32px);
+  height: 140px;
+  margin: -14px -16px 6px;
+  border-radius: 10px 10px 0 0;
+  object-fit: cover;
+  background: var(--hair);
+}
+
+.tips-phone-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.tips-phone-heading .tip-number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.tips-phone-text {
+  font-family: var(--font-stage);
+  font-size: 19px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tips-phone-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tips-phone-places a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.tips-phone-places a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tips-phone-map {
+  position: relative;
+  height: 280px;
+  margin-top: 16px;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: #c7d3d0;
+}
+
+.tips-phone-map .maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+
+.tips-copy {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 -16px;
+  padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  border-top: 1px solid var(--hair);
+  background: var(--paper);
+}
+
+.tips-copy-status {
+  min-height: 1.5em;
+  color: var(--ink-2);
+  font-size: 14px;
+  text-align: center;
+}
+
+.tips-copy-text {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  user-select: text;
+  -webkit-user-select: text;
+}

@@ -1,0 +1,577 @@
+/*
+ * The painted sky behind the TV. Everything here sits behind the content and never takes
+ * clicks. Only transform and opacity animate, so an ordinary laptop keeps up.
+ */
+
+.scene-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  /* Below the text boxes in tv.css, which sit at -1. */
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scene-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.scene-layer.entering {
+  animation: scene-in 1.6s ease-in-out both;
+}
+
+@keyframes scene-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scene-sky,
+.scene-glow,
+.scene-veil {
+  position: absolute;
+  inset: 0;
+}
+
+/* Colours for each time of day */
+.mood-day {
+  --sky: linear-gradient(180deg, #2c6cb3 0%, #4f93d6 30%, #8cc2ea 58%, #cfe7f3 80%, #eef5e6 100%);
+  --glow: radial-gradient(circle at 82% 12%, rgba(255, 251, 226, 0.85) 0 3.5rem, rgba(255, 246, 200, 0.35) 7rem, transparent 26rem);
+  --cloud-light: #ffffff;
+  --cloud-body: #eef3fa;
+  --cloud-shade: #a9bed6;
+  --hill-far: #8ab7b0;
+  --hill-mid: #5f9a5a;
+  --hill-near: #3f7a3f;
+  --tree: #2c5a33;
+  --tree-light: #4c8a46;
+  --grass-back: #4a8a43;
+  --grass-front: #69a553;
+  --pole: #4b4a45;
+  --bird: #3a4a5c;
+  --veil: linear-gradient(90deg, rgba(240, 248, 255, 0.35), transparent 55%);
+}
+
+.mood-dusk {
+  --sky: linear-gradient(180deg, #121937 0%, #232a57 36%, #3b3466 58%, #66457a 70%, #b0607a 78%, #e48e6b 85%, #f6c48d 93%);
+  --glow: radial-gradient(ellipse at 45% 92%, rgba(255, 200, 140, 0.5) 0, rgba(255, 170, 120, 0.18) 20rem, transparent 38rem);
+  --cloud-light: #ffcfb4;
+  --cloud-body: #b88aa8;
+  --cloud-shade: #5c4d80;
+  --hill-far: #4d4170;
+  --hill-mid: #312d52;
+  --hill-near: #1f1f37;
+  --tree: #1a1a2e;
+  --tree-light: #262744;
+  --grass-back: #232440;
+  --grass-front: #2c2d4c;
+  --star: #fff6d8;
+  --veil: linear-gradient(180deg, rgba(10, 12, 30, 0.15), transparent 40%);
+}
+
+.mood-night {
+  --sky: linear-gradient(180deg, #060c1b 0%, #0b1730 40%, #11253c 75%, #173043 100%);
+  --glow: radial-gradient(circle at 62% 26%, rgba(240, 240, 214, 0.9) 0 2.6rem, rgba(200, 220, 230, 0.18) 4.5rem, transparent 22rem);
+  --cloud-light: #3b5070;
+  --cloud-body: #2a3b58;
+  --cloud-shade: #172540;
+  --hill-far: #102434;
+  --hill-mid: #0b1a27;
+  --hill-near: #060f17;
+  --star: #e9f0ff;
+  --veil: linear-gradient(180deg, transparent 60%, rgba(4, 8, 14, 0.25));
+}
+
+.mood-sunset {
+  --sky: linear-gradient(180deg, #1c1a3a 0%, #3b2a5a 26%, #78406b 46%, #c25c5d 62%, #ef8a4e 78%, #f9c56d 92%);
+  --glow: radial-gradient(ellipse at 66% 78%, rgba(255, 214, 140, 0.7) 0 4rem, rgba(255, 160, 100, 0.3) 14rem, transparent 40rem);
+  --cloud-light: #ffcda6;
+  --cloud-body: #e08a86;
+  --cloud-shade: #84466c;
+  --hill-far: #5a3058;
+  --hill-mid: #3a1f40;
+  --hill-near: #22122a;
+  --grass-back: #2a1630;
+  --grass-front: #321a38;
+  --pole: #24152c;
+  --bird: #2a1830;
+  --star: #ffe9cf;
+  --veil: linear-gradient(180deg, rgba(14, 10, 30, 0.2), transparent 30%);
+}
+
+.mood-lanterns {
+  --sky: linear-gradient(180deg, #04060f 0%, #0b1030 45%, #1b1d48 75%, #2e2853 100%);
+  --glow: radial-gradient(ellipse at 50% 100%, rgba(255, 170, 90, 0.28) 0, transparent 40rem);
+  --cloud-light: #2f3462;
+  --cloud-body: #22264c;
+  --cloud-shade: #151836;
+  --hill-far: #171936;
+  --hill-mid: #0f1028;
+  --hill-near: #08091a;
+  --tree: #07081a;
+  --tree-light: #0d0f26;
+  --star: #fff3d6;
+  --veil: none;
+}
+
+.scene-sky { background: var(--sky); }
+.scene-glow { background: var(--glow); }
+.scene-veil { background: var(--veil); }
+
+/* A film still over the painted sky, darkened where the words go */
+.scene-photo {
+  position: absolute;
+  inset: -2%;
+  background-position: center;
+  background-size: cover;
+  opacity: 0;
+  transition: opacity 1.2s ease-in-out;
+}
+
+.scene-photo.shown {
+  opacity: 1;
+  animation: photo-drift 60s ease-in-out infinite alternate;
+}
+
+.scene-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--photo-veil);
+}
+
+@keyframes photo-drift {
+  from { transform: scale(1) translate(0, 0); }
+  to { transform: scale(1.08) translate(-1.5%, -1%); }
+}
+
+.mood-dusk { --photo-veil: linear-gradient(180deg, rgba(10, 12, 30, 0.55) 0%, rgba(10, 12, 30, 0.2) 45%, rgba(10, 12, 30, 0.4) 100%); }
+.mood-day { --photo-veil: linear-gradient(90deg, rgba(8, 14, 28, 0.7) 0%, rgba(8, 14, 28, 0.42) 40%, rgba(8, 14, 28, 0) 70%); }
+.mood-night { --photo-veil: linear-gradient(180deg, rgba(4, 8, 16, 0.35) 0%, rgba(4, 8, 16, 0.15) 50%, rgba(4, 8, 16, 0.3) 100%); }
+.mood-sunset { --photo-veil: linear-gradient(180deg, rgba(14, 10, 30, 0.6) 0%, rgba(14, 10, 30, 0.2) 50%, rgba(14, 10, 30, 0.4) 100%); }
+.mood-lanterns { --photo-veil: linear-gradient(180deg, rgba(4, 6, 14, 0.65) 0%, rgba(4, 6, 14, 0.35) 55%, rgba(4, 6, 14, 0.5) 100%); }
+
+/* Stars */
+.scene-stars {
+  position: absolute;
+  inset: 0;
+}
+
+.star {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--star);
+  box-shadow: 0 0 0.4rem var(--star);
+  animation: twinkle var(--t) ease-in-out var(--delay) infinite alternate;
+}
+
+@keyframes twinkle {
+  from { opacity: 0.2; }
+  to { opacity: 0.95; }
+}
+
+/* Clouds */
+.scene-clouds {
+  position: absolute;
+  inset: 0;
+  /* Keeps each cloud's depth inside this layer, so a film still covers them all. */
+  z-index: 0;
+}
+
+.cloud {
+  position: absolute;
+  left: 0;
+  width: var(--w);
+  opacity: var(--fade);
+  will-change: transform;
+  animation: cloud-drift var(--dur) linear var(--delay) infinite;
+}
+
+@keyframes cloud-drift {
+  from { transform: translateX(calc(-1 * var(--w))); }
+  to { transform: translateX(125rem); }
+}
+
+.cloud-svg,
+.cloud-tower {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.c-shade { fill: var(--cloud-shade); }
+.c-body { fill: var(--cloud-body); }
+.c-light { fill: var(--cloud-light); }
+
+.mood-night .cloud { opacity: calc(var(--fade) * 0.55); }
+.mood-lanterns .cloud { opacity: calc(var(--fade) * 0.5); }
+
+.scene-tower {
+  position: absolute;
+  right: 6%;
+  bottom: 22%;
+  width: 46rem;
+  opacity: 0.95;
+  transform-origin: 50% 100%;
+  animation: tower-breathe 18s ease-in-out infinite alternate;
+}
+
+.mood-sunset .scene-tower {
+  right: auto;
+  left: 52%;
+  width: 40rem;
+}
+
+@keyframes tower-breathe {
+  from { transform: scale(1); }
+  to { transform: scale(1.03, 1.05); }
+}
+
+/* Land */
+.scene-land {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 34%;
+}
+
+.hill-far { fill: var(--hill-far); }
+.hill-mid { fill: var(--hill-mid); }
+.hill-near { fill: var(--hill-near); }
+
+.mood-night .scene-land { height: 30%; }
+
+.scene-tree {
+  position: absolute;
+  left: 63%;
+  bottom: 17%;
+  width: 17rem;
+  transform-origin: 50% 100%;
+  animation: tree-sway 7s ease-in-out infinite alternate;
+}
+
+.mood-dusk .scene-tree { left: 70%; bottom: 18%; }
+.mood-lanterns .scene-tree { left: 8%; bottom: 17%; width: 14rem; }
+
+.tree-trunk { fill: var(--tree); }
+.tree-crown { fill: var(--tree); }
+.tree-light { fill: var(--tree-light); opacity: 0.8; }
+
+@keyframes tree-sway {
+  from { transform: rotate(-0.6deg); }
+  to { transform: rotate(0.8deg); }
+}
+
+.scene-poles {
+  position: absolute;
+  left: 34%;
+  bottom: 15%;
+  width: 62%;
+  height: 11%;
+}
+
+.pole { fill: var(--pole); }
+
+.pole-wire {
+  fill: none;
+  stroke: var(--pole);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+}
+
+.scene-grass {
+  position: absolute;
+  left: -1%;
+  bottom: 0;
+  width: 102%;
+  height: 7%;
+}
+
+.grass-back,
+.grass-front {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.grass-back {
+  fill: var(--grass-back);
+  animation: grass-wave 4.5s ease-in-out infinite alternate;
+}
+
+.grass-front {
+  fill: var(--grass-front);
+  animation: grass-wave 3.5s ease-in-out -1.2s infinite alternate;
+}
+
+@keyframes grass-wave {
+  from { transform: skewX(-6deg); }
+  to { transform: skewX(7deg); }
+}
+
+/* Birds cross the sky every so often */
+.scene-birds {
+  position: absolute;
+  top: 14%;
+  left: 0;
+  width: 12rem;
+  height: 6rem;
+  animation: birds-cross 46s linear -8s infinite;
+}
+
+.bird {
+  position: absolute;
+  width: 2.2rem;
+  fill: var(--bird);
+  animation: flap 0.9s ease-in-out infinite alternate;
+}
+
+.bird:nth-child(1) { left: 0; top: 2rem; }
+.bird:nth-child(2) { left: 2.6rem; top: 0.6rem; width: 1.8rem; animation-delay: -0.3s; }
+.bird:nth-child(3) { left: 3rem; top: 3.6rem; width: 1.6rem; animation-delay: -0.6s; }
+.bird:nth-child(4) { left: 5.6rem; top: 1.4rem; width: 1.4rem; animation-delay: -0.15s; }
+.bird:nth-child(5) { left: 6.4rem; top: 4.2rem; width: 1.3rem; animation-delay: -0.45s; }
+
+@keyframes birds-cross {
+  from { transform: translate(-14rem, 4rem); }
+  to { transform: translate(134rem, -3rem); }
+}
+
+@keyframes flap {
+  from { transform: scaleY(1); }
+  to { transform: scaleY(0.35); }
+}
+
+/* Drifting things: dandelion seeds, leaves, fireflies and sky lanterns */
+.scene-particles {
+  position: absolute;
+  inset: 0;
+}
+
+.particle {
+  position: absolute;
+  left: 0;
+  top: var(--y);
+  will-change: transform;
+}
+
+.seeds .particle,
+.leaves .particle {
+  animation: drift-across var(--dur) linear var(--delay) infinite;
+}
+
+@keyframes drift-across {
+  from { transform: translate(-4rem, 0); }
+  to { transform: translate(126rem, var(--rise)); }
+}
+
+.particle-inner {
+  display: block;
+}
+
+.seeds .particle-inner {
+  width: calc(0.9rem * var(--s));
+  height: calc(0.9rem * var(--s));
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 252, 240, 0.95) 0 18%, rgba(255, 250, 235, 0.5) 30%, transparent 70%);
+  animation: bob var(--wobble) ease-in-out infinite alternate;
+}
+
+.leaves .particle-inner {
+  width: calc(1.1rem * var(--s));
+  height: calc(0.55rem * var(--s));
+  border-radius: 100% 0;
+  background: #7dbb5a;
+  box-shadow: inset -0.1rem -0.1rem 0 rgba(30, 80, 30, 0.35);
+  animation: tumble var(--wobble) linear infinite;
+}
+
+@keyframes bob {
+  from { transform: translateY(-1.2rem); }
+  to { transform: translateY(1.2rem); }
+}
+
+@keyframes tumble {
+  from { transform: translateY(-1rem) rotate(0deg) scaleX(1); }
+  50% { transform: translateY(1rem) rotate(calc(180deg * var(--spin))) scaleX(0.4); }
+  to { transform: translateY(-1rem) rotate(calc(360deg * var(--spin))) scaleX(1); }
+}
+
+.fireflies .particle {
+  left: var(--x);
+  animation: firefly-wander var(--dur) ease-in-out var(--delay) infinite alternate;
+}
+
+.fireflies .particle-inner {
+  width: calc(0.45rem * var(--s));
+  height: calc(0.45rem * var(--s));
+  border-radius: 50%;
+  background: #f6f3a8;
+  box-shadow: 0 0 0.6rem 0.25rem rgba(230, 240, 120, 0.55), 0 0 1.6rem 0.6rem rgba(200, 230, 90, 0.2);
+  animation: glow var(--wobble) ease-in-out var(--delay) infinite alternate;
+}
+
+@keyframes firefly-wander {
+  0% { transform: translate(0, 0); }
+  33% { transform: translate(3rem, -2.5rem); }
+  66% { transform: translate(-2rem, -5rem); }
+  100% { transform: translate(1.5rem, -8rem); }
+}
+
+@keyframes glow {
+  0%, 30% { opacity: 0.05; }
+  70%, 100% { opacity: 1; }
+}
+
+.lanterns .particle {
+  left: var(--x);
+  top: 105%;
+  animation: lantern-rise var(--dur) linear var(--delay) infinite;
+}
+
+.lanterns .particle-inner {
+  width: calc(1.3rem * var(--s));
+  height: calc(1.7rem * var(--s));
+  border-radius: 35% 35% 25% 25% / 30% 30% 20% 20%;
+  background: radial-gradient(ellipse at 50% 75%, #fff2c4 0, #ffbe5c 40%, #e2742f 100%);
+  box-shadow: 0 0 1.4rem 0.4rem rgba(255, 170, 80, 0.45), 0 0 4rem 1rem rgba(255, 140, 60, 0.18);
+  animation: lantern-sway var(--wobble) ease-in-out infinite alternate;
+}
+
+@keyframes lantern-rise {
+  from { transform: translateY(0); opacity: 0; }
+  8% { opacity: 1; }
+  85% { opacity: 0.9; }
+  to { transform: translateY(-80rem); opacity: 0; }
+}
+
+@keyframes lantern-sway {
+  from { transform: translateX(-0.8rem) rotate(-3deg); }
+  to { transform: translateX(0.8rem) rotate(3deg); }
+}
+
+/* The clouds part between games */
+.cloud-part {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cloud-part-mist {
+  position: absolute;
+  inset: 0;
+  background: var(--cloud-body);
+  animation: mist-clear 1s ease-out 0.2s both;
+}
+
+@keyframes mist-clear {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.part-cloud {
+  position: absolute;
+  will-change: transform, opacity;
+}
+
+.part-cloud.left { animation: part-left 1.7s cubic-bezier(0.55, 0, 0.35, 1) 0.1s both; }
+.part-cloud.right { animation: part-right 1.7s cubic-bezier(0.55, 0, 0.35, 1) 0.1s both; }
+
+@keyframes part-left {
+  from { transform: translateX(0) scale(1.1); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(-85rem) scale(1.3); opacity: 0; }
+}
+
+@keyframes part-right {
+  from { transform: translateX(0) scale(1.1); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(85rem) scale(1.3); opacity: 0; }
+}
+
+/* A GIF pinned up like a polaroid */
+.gif-card {
+  position: relative;
+  flex: none;
+  margin: 0;
+  padding: 1rem 1rem 0;
+  border-radius: 3px;
+  background: #fbf7ec;
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.35), 0 0.25rem 0.5rem rgba(0, 0, 0, 0.2);
+  color: var(--ink);
+  transform: rotate(var(--tilt, 2deg));
+}
+
+.gif-card.loading {
+  visibility: hidden;
+}
+
+.gif-card.ready {
+  animation: gif-in 0.8s var(--ease-soft) 0.9s both;
+}
+
+@keyframes gif-in {
+  from { opacity: 0; transform: translateY(3rem) rotate(calc(var(--tilt, 2deg) * -2)) scale(0.85); }
+  to { opacity: 1; transform: rotate(var(--tilt, 2deg)); }
+}
+
+.gif-card img {
+  display: block;
+  width: 100%;
+  max-height: 30rem;
+  object-fit: cover;
+  background: #d9d4c6;
+}
+
+.gif-card figcaption {
+  padding: 0.9rem 0.5rem 1.1rem;
+  font-family: var(--font-stage);
+  font-size: 2.25rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.gif-tape {
+  position: absolute;
+  top: -1.2rem;
+  left: 50%;
+  z-index: 1;
+  width: 10rem;
+  height: 2.6rem;
+  background: rgba(236, 214, 150, 0.78);
+  box-shadow: 0 0.1rem 0.3rem rgba(0, 0, 0, 0.15);
+  transform: translateX(-50%) rotate(-4deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Frozen part-way, so the sky stays spread out rather than stacking in one corner. */
+  .scene * {
+    animation-play-state: paused !important;
+  }
+
+  .scene-layer.entering,
+  .gif-card.ready {
+    animation: none !important;
+  }
+
+  .cloud-part {
+    display: none;
+  }
+}

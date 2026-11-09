@@ -1,0 +1,1895 @@
+/*
+ * Sized for a 1080p TV, then scaled to fit any screen, so rem values map to the
+ * spec's pixel sizes: 1rem = 16px at 1920×1080. Nothing goes below 1.5rem (24px).
+ */
+html[data-surface='panel'] {
+  font-size: min(calc(100vw / 120), calc(100vh / 67.5));
+}
+
+html[data-surface='panel'],
+html[data-surface='panel'] body {
+  overflow: hidden;
+}
+
+.tv {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 3.5rem 5rem 3rem;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font-size: 1.75rem;
+  line-height: 1.35;
+}
+
+.tv-header {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--panel-hair);
+}
+
+.tv-kicker {
+  color: var(--panel-ink-2);
+  font-size: 1.75rem;
+}
+
+.tv-header > div {
+  min-width: 0;
+}
+
+.tv-title {
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 6rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.tv-title.long {
+  font-size: 4rem;
+}
+
+.tv-count {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--celadon);
+  font-family: var(--font-digit);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tv-count-now {
+  font-size: 7rem;
+}
+
+.tv-count-sep {
+  color: var(--panel-ink-2);
+  font-family: var(--font-body);
+  font-size: 3rem;
+  font-weight: 400;
+}
+
+.tv-count-max {
+  color: var(--panel-ink-2);
+  font-size: 2.5rem;
+}
+
+.lobby-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 27rem 1fr;
+  gap: 5rem;
+  padding-top: 2.5rem;
+}
+
+.lobby-join {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* The one sheet of paper on the machine. QR codes need the contrast. */
+.qr-card {
+  padding: 1.5rem;
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.qr-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.lobby-instruction {
+  font-size: 2.25rem;
+  line-height: 1.25;
+}
+
+.lobby-sub {
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+.lobby-code {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--panel-ink);
+  font-family: var(--font-stage);
+  font-size: 3rem;
+  letter-spacing: 0.2em;
+  line-height: 1.1;
+}
+
+.names {
+  display: grid;
+  align-content: start;
+  gap: 0 2.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+.names.tier-1 { grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: 2.5rem; }
+.names.tier-2 { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 2rem; }
+.names.tier-3 { grid-template-columns: repeat(5, minmax(0, 1fr)); font-size: 1.625rem; }
+
+.names li {
+  overflow: hidden;
+  padding: 0.5em 0;
+  border-bottom: 1px solid var(--panel-hair);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: name-in 0.25s ease-out both;
+}
+
+.names li.offline {
+  color: var(--panel-ink-2);
+  opacity: 0.55;
+}
+
+@keyframes name-in {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.names-empty {
+  color: var(--panel-ink-2);
+  font-size: 2rem;
+}
+
+/* Title card */
+.title-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.title-numeral {
+  font-family: var(--font-pixel);
+  font-size: 18rem;
+  line-height: 1;
+}
+
+.title-name {
+  font-family: var(--font-stage);
+  font-size: 7rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.title-rule {
+  color: var(--panel-ink-2);
+  font-size: 2.25rem;
+}
+
+/* Quiet corner lines */
+.tv-prompts {
+  position: fixed;
+  left: 5rem;
+  bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 3;
+}
+
+.tv-prompt {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--panel-hair);
+  border-radius: 6px;
+  background: var(--charcoal);
+  font-size: 1.5rem;
+}
+
+/* The join code over any screen after the lobby, until the presenter closes it. */
+.tv-rejoin-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.tv-rejoin {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  max-width: 64rem;
+  padding: 2.5rem;
+  border: 1px solid var(--panel-hair);
+  border-radius: 8px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+}
+
+.tv-rejoin .qr-card {
+  flex: none;
+  width: 24rem;
+}
+
+.tv-rejoin-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.tv-rejoin-text h2 {
+  margin: 0;
+  font-weight: inherit;
+}
+
+.tv-rejoin-text p {
+  margin: 0;
+}
+
+.tv-rejoin-text .tv-key {
+  margin-top: 1rem;
+}
+
+.tv-offline {
+  position: fixed;
+  right: 5rem;
+  top: 1rem;
+  color: var(--digit-last);
+  font-size: 1.5rem;
+}
+
+/* Control bar: hidden until the mouse moves */
+.tv-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 5rem;
+  border-top: 1px solid var(--panel-hair);
+  background: var(--charcoal);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.tv-bar.shown {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tv-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.875rem;
+  border: 0;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #33332f, #1f1f1c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 0 #000;
+  color: var(--panel-ink);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.tv-key:active {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+.tv-key:focus-visible {
+  outline: 2px solid var(--celadon);
+  outline-offset: 2px;
+}
+
+.tv-key kbd {
+  color: var(--panel-ink-2);
+  font-family: inherit;
+}
+
+.tv-key.danger {
+  color: var(--digit-last);
+}
+
+/* Player list */
+.tv-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 44rem;
+  padding: 2.5rem 3rem;
+  border-left: 1px solid var(--panel-hair);
+  background: var(--charcoal);
+}
+
+.tv-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--panel-hair);
+}
+
+.tv-panel-list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.tv-panel-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--panel-hair);
+  font-size: 1.75rem;
+}
+
+.tv-panel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-panel-state {
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .names li { animation: none; }
+  .tv-bar { transition: none; }
+}
+
+/* A timed round */
+.sunbar.tv-sunbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.75rem;
+}
+
+.tv-sunbar .sunbar-sun {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: -0.5625rem 0 0 -0.5625rem;
+}
+
+.tv-round-head {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4rem;
+  min-height: 3rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--panel-hair);
+}
+
+.tv-round-line {
+  color: var(--panel-ink-2);
+  font-size: 1.75rem;
+}
+
+.tv-clock {
+  color: var(--digit);
+  font-family: var(--font-digit);
+  font-size: 8.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tv-clock.last {
+  color: var(--digit-last);
+}
+
+.tv-word {
+  flex: none;
+  padding: 2.5rem 0 2rem;
+}
+
+.tv-word-text {
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 6rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.tv-word-text.long {
+  font-size: 4rem;
+}
+
+.tv-word-rule {
+  margin-top: 0.75rem;
+  color: var(--panel-ink-2);
+  font-size: 2.25rem;
+}
+
+.tv-word.small {
+  padding: 1.25rem 0 1rem;
+}
+
+.tv-word.small .tv-word-text {
+  font-size: 3.5rem;
+}
+
+.tv-word.small .tv-word-rule {
+  font-size: 1.75rem;
+}
+
+/*
+ * Define it's word clip. Only its sound is wanted: the video's title and picture can give the
+ * meaning away, so YouTube's player stays full size but invisible, and "Listen" shows instead.
+ */
+.tv-word.has-clip {
+  position: relative;
+  padding-right: 14rem;
+}
+
+.tv-clip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24rem;
+  aspect-ratio: 16 / 9;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tv-clip iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.tv-listen {
+  position: absolute;
+  top: 3.5rem;
+  right: 0;
+  color: var(--celadon);
+  font-size: 2.25rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.tv-listen.shown {
+  opacity: 1;
+}
+
+.tv-listen-mark {
+  display: inline-block;
+}
+
+.tv-listen.shown .tv-listen-mark {
+  animation: tv-listen-bob 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes tv-listen-bob {
+  to {
+    transform: translateY(-0.4rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-listen.shown .tv-listen-mark {
+    animation: none;
+  }
+}
+
+.tv-progress {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tv-progress-count {
+  color: var(--celadon);
+  font-size: 2.25rem;
+}
+
+.names li.waiting-name-row {
+  color: var(--panel-ink-2);
+}
+
+.names li.done::before {
+  content: '✓ ';
+  color: var(--celadon);
+}
+
+/* Answer list: light text on charcoal, with hairlines between rows */
+.entries {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 0 3rem;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border-top: 1px solid var(--panel-hair);
+}
+
+.entries.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entries li {
+  min-width: 0;
+  border-bottom: 1px solid var(--panel-hair);
+  animation: row-in 0.25s var(--ease-soft) both;
+}
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.875rem 0;
+  border: 0;
+  background: none;
+  color: var(--panel-ink);
+  font-size: 2.5rem;
+  line-height: 1.25;
+  text-align: left;
+}
+
+button.entry {
+  cursor: pointer;
+}
+
+button.entry:disabled {
+  cursor: default;
+}
+
+button.entry:hover:not(:disabled) .entry-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--accent-on-dark);
+}
+
+button.entry:focus-visible {
+  outline: 2px solid var(--celadon);
+  outline-offset: 2px;
+}
+
+.two-up .entry {
+  font-size: 2rem;
+}
+
+.entry-text {
+  overflow-wrap: anywhere;
+  /* Right-to-left answers read correctly while staying in the same column. */
+  unicode-bidi: plaintext;
+}
+
+.entry-detail {
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+/* The moment the real answer turns into paper */
+.entry.real {
+  padding: 0.875rem 5.5rem 0.875rem 1rem;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  animation: to-paper 0.5s ease-out both;
+}
+
+.entry.real .entry-detail {
+  color: var(--accent);
+}
+
+@keyframes to-paper {
+  from { background: transparent; color: var(--panel-ink); }
+  to { background: var(--paper); color: var(--ink); }
+}
+
+/* A persimmon pencil circle, drawn once in the margin like a teacher marking a test. */
+.pencil-ring {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-top: -1.75rem;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 320;
+  animation: ring-draw 0.8s 0.3s ease-out both;
+}
+
+@keyframes ring-draw {
+  from { stroke-dashoffset: 320; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* A photo round: the photo stays put through every stage, and the column beside it changes. */
+.tv-photo-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 3rem;
+  padding-top: 1.5rem;
+}
+
+.tv-photo-stage.roomy {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.tv-photo {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+.tv-photo img,
+.tv-photo video,
+.tv-photo .photo-missing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Lines up with the header above it and the heading beside it, whatever shape the photo is. */
+.tv-photo img,
+.tv-photo video {
+  object-fit: contain;
+  object-position: left top;
+}
+
+.tv-photo .photo-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--panel-ink-2);
+  font-size: 2rem;
+}
+
+.tv-photo-side {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tv-photo-side .tv-word.small {
+  padding-top: 0;
+}
+
+.tv-photo-side .tv-progress-count {
+  font-size: 1.75rem;
+}
+
+/* The same name grid as the lobby, in about a third of the width. */
+.tv-photo-side .names.tier-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: 2rem; }
+.tv-photo-side .names.tier-2 { grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: 1.625rem; }
+.tv-photo-side .names.tier-3 { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 1.5rem; }
+.tv-photo-side .names.tier-3 li { padding: 0.3em 0; }
+
+.tv-photo-side .entry {
+  font-size: 2rem;
+}
+
+/* Pick one: a question rather than a two-word heading, so it steps down a size. */
+.tv-word.small .tv-word-text.question {
+  font-size: 2.75rem;
+  line-height: 1.2;
+}
+
+/* The four answers, lettered like the phones, with how many chose each filling in at the reveal. */
+.choices {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.875rem 1.25rem 1.125rem;
+  overflow: hidden;
+  border: 1px solid var(--panel-hair);
+  border-radius: 6px;
+  color: var(--panel-ink);
+  font-size: 2.25rem;
+  line-height: 1.2;
+  animation: row-in 0.25s var(--ease-soft) both;
+}
+
+.choice > * {
+  transition: opacity 0.4s ease-out;
+}
+
+.choice:nth-child(2) { animation-delay: 0.08s; }
+.choice:nth-child(3) { animation-delay: 0.16s; }
+.choice:nth-child(4) { animation-delay: 0.24s; }
+
+.choice-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border: 1px solid var(--panel-ink-2);
+  border-radius: 50%;
+  color: var(--panel-ink-2);
+  font-size: 1.625rem;
+}
+
+.choice-count {
+  min-width: 2ch;
+  color: var(--celadon);
+  font-family: var(--font-digit);
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* A thin bar along the foot of each answer, as long as its share of the most popular one. */
+.choice-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 0.3rem;
+  width: calc(var(--share, 0) * 100%);
+  background: var(--celadon);
+  transition:
+    width 0.9s var(--ease-soft),
+    opacity 0.4s ease-out;
+}
+
+/* The contents dim rather than the row, whose arrival animation holds its own opacity. */
+.choice.wrong > * {
+  opacity: 0.45;
+}
+
+/* The right answer turns to paper, like the real definition in Define it. */
+.choice.real {
+  padding-right: 5.5rem;
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+  animation: to-paper 0.5s ease-out both;
+}
+
+.choice.real .choice-letter {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.choice.real .choice-count {
+  color: var(--accent);
+}
+
+.choice.real .choice-bar {
+  background: var(--accent);
+}
+
+.choice-right {
+  flex: none;
+  padding-top: 1.5rem;
+  animation: row-in 0.25s var(--ease-soft) both;
+}
+
+.choice-right-head {
+  color: var(--celadon);
+  font-size: 2rem;
+}
+
+.choice-right-names {
+  margin-top: 0.4rem;
+  color: var(--panel-ink);
+  font-size: 1.625rem;
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice,
+  .choice.real,
+  .choice-right { animation: none; }
+  .choice > *,
+  .choice-bar { transition: none; }
+}
+
+/* One answer at a time: the largest text on the screen, with nothing competing for attention. */
+.tv-show {
+  justify-content: center;
+  gap: 1.5rem;
+  padding-bottom: 4rem;
+}
+
+/* Define it has no photo, so the answer has the width of the screen, at a comfortable line length. */
+.tv-show.solo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 90rem;
+  border-top: 1px solid var(--panel-hair);
+}
+
+.tv-show-count {
+  color: var(--panel-ink-2);
+  font-size: 1.75rem;
+  font-weight: 400;
+}
+
+.tv-show-text {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--panel-ink);
+  cursor: pointer;
+  font-family: var(--font-stage);
+  font-size: 4.5rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  animation: row-in 0.25s var(--ease-soft) both;
+}
+
+.tv-show-text.long {
+  font-size: 3.25rem;
+}
+
+.tv-show-text:hover .entry-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--accent-on-dark);
+}
+
+.tv-show-text:focus-visible {
+  outline: 2px solid var(--celadon);
+  outline-offset: 2px;
+}
+
+/* Standings: a ruled list */
+.board {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.5rem 0 0;
+  overflow: hidden;
+  list-style: none;
+}
+
+.board-row {
+  display: grid;
+  grid-template-columns: 5rem 1fr auto;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--panel-hair);
+  font-size: 2.5rem;
+  line-height: 1.25;
+}
+
+.board-rank {
+  color: var(--panel-ink-2);
+}
+
+.board-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-score {
+  color: var(--celadon);
+  font-family: var(--font-digit);
+  font-size: 2.25rem;
+  font-weight: 700;
+}
+
+.board-more {
+  flex: none;
+  padding-top: 0.75rem;
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entries li { animation: none; }
+  .tv-show-text { animation: none; }
+  .entry.real { animation: none; }
+  .pencil-ring { animation: none; stroke-dashoffset: 0; }
+}
+
+/* Where was this? The map takes the room, with the photo, the place and the closest guesses beside it. */
+.tv-map-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 2.5fr);
+  gap: 3rem;
+  padding-top: 1.5rem;
+}
+
+.tv-map {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #c7d3d0;
+}
+
+.tv-map .maplibregl-ctrl-attrib {
+  font-size: 12px;
+}
+
+.tv-map-side {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tv-map-side .tv-photo {
+  flex: 0 1 16rem;
+}
+
+.tv-map-place {
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 3rem;
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.pin-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pin-row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--panel-hair);
+  font-size: 2rem;
+  line-height: 1.2;
+  opacity: 0;
+}
+
+.pin-row.in {
+  opacity: 1;
+  transition: opacity 0.25s ease-out;
+}
+
+.pin-row-rank {
+  color: var(--panel-ink-2);
+}
+
+.pin-row-who {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pin-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-row-km {
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+.pin-row-points {
+  color: var(--celadon);
+  font-family: var(--font-digit);
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.pin-rows-more {
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+}
+
+/* Thin and larger than a guest's pin, so the real spot is the first thing you see. */
+.pin-mark.target {
+  width: 64px;
+  height: 64px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 35%, transparent) 0 10px,
+    transparent 11px
+  );
+  cursor: default;
+}
+
+.pin-mark.target::before {
+  top: 31px;
+  width: 64px;
+}
+
+.pin-mark.target::after {
+  left: 31px;
+  height: 64px;
+}
+
+.map-name {
+  max-width: 16rem;
+  overflow: hidden;
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font-size: 1.5rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pin-row.in { transition: none; }
+}
+
+/* Final podium: 2–1–3, with 1st wider and taller, then everyone else in a ruled list */
+.final-head {
+  padding-bottom: 1.5rem;
+}
+
+.final-head .tv-title {
+  font-size: 4.5rem;
+}
+
+.podium {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 2.5rem;
+  height: 29rem;
+  margin: 2rem auto 1.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.podium-slot {
+  grid-row: 1;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.place-1 {
+  grid-column: var(--column-1);
+  --m1: #f7e7a8;
+  --m2: #d4ae4f;
+  --m3: #8c6a1f;
+  --tint-top: rgba(212, 174, 79, 0.24);
+  --tint-bottom: rgba(212, 174, 79, 0.07);
+  --edge: rgba(212, 174, 79, 0.5);
+  --glow: rgba(212, 174, 79, 0.32);
+}
+
+.place-2 {
+  grid-column: var(--column-2);
+  --m1: #f4f4f1;
+  --m2: #bfc0bb;
+  --m3: #7c7e79;
+  --tint-top: rgba(191, 192, 187, 0.2);
+  --tint-bottom: rgba(191, 192, 187, 0.06);
+  --edge: rgba(191, 192, 187, 0.42);
+  --glow: rgba(191, 192, 187, 0.16);
+}
+
+.place-3 {
+  grid-column: var(--column-3);
+  --m1: #f3c9a0;
+  --m2: #bd7d4c;
+  --m3: #7c4a27;
+  --tint-top: rgba(189, 125, 76, 0.22);
+  --tint-bottom: rgba(189, 125, 76, 0.06);
+  --edge: rgba(189, 125, 76, 0.45);
+  --glow: rgba(189, 125, 76, 0.14);
+}
+
+.podium-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  padding: 2.25rem 2.25rem 1.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--tint-top), var(--tint-bottom));
+  box-shadow: 0 0 3.5rem var(--glow);
+}
+
+/* Lower places stand lower, but grow to fit a shared place's names. */
+.place-2 .podium-card { min-height: 84%; }
+.place-3 .podium-card { min-height: 72%; }
+
+/* The metallic top edge */
+.podium-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.5rem;
+  background: linear-gradient(90deg, var(--m3), var(--m1) 40%, var(--m2) 65%, var(--m3));
+}
+
+.podium-rank {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+}
+
+.podium-numeral {
+  background: linear-gradient(180deg, var(--m1), var(--m2) 55%, var(--m3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: var(--font-stage);
+  font-size: 6rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.place-1 .podium-numeral {
+  font-size: 7.5rem;
+}
+
+.podium-winner {
+  color: var(--m1);
+  font-size: 1.75rem;
+  letter-spacing: 0.08em;
+}
+
+.podium-winner [lang='ja'] {
+  font-family: var(--font-stage);
+}
+
+.podium-names {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 0;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 3rem;
+  line-height: 1.2;
+}
+
+.place-1 .podium-names {
+  font-size: 3.25rem;
+}
+
+.podium-names.shared,
+.place-1 .podium-names.shared {
+  gap: 0;
+  margin-top: 0.75rem;
+  font-size: 2.25rem;
+}
+
+.podium-names li {
+  flex: none;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.podium-names.shared li {
+  -webkit-line-clamp: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.podium-more {
+  color: var(--panel-ink-2);
+  font-size: 1.75rem;
+}
+
+
+.podium-slot.shared .podium-numeral {
+  font-size: 5rem;
+}
+
+.podium-score {
+  margin-top: auto;
+  padding-top: 1rem;
+  color: var(--m1);
+  font-family: var(--font-digit);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Still to come: an empty plinth, so nothing shifts when it lands */
+.podium-slot.waiting .podium-card {
+  border: 1px dashed var(--panel-hair);
+  background: none;
+  box-shadow: none;
+}
+
+.podium-slot.waiting .podium-card::before {
+  display: none;
+}
+
+.podium-slot.waiting .podium-numeral {
+  background: none;
+  color: var(--panel-hair);
+}
+
+/* Landing: a short slam, then one light sweep */
+.podium-slot.landing .podium-card {
+  animation: podium-slam 0.5s both;
+}
+
+.podium-slot.landing .podium-card::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -40%;
+  width: 35%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.26), transparent);
+  transform: skewX(-12deg);
+  animation: podium-sweep 1s 0.4s ease-out both;
+}
+
+.podium-slot.appear .podium-card {
+  animation: row-in 0.3s var(--ease-soft) both;
+}
+
+@keyframes podium-slam {
+  0% { opacity: 0; transform: translateY(-3rem) scale(1.05); animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.4); }
+  62% { opacity: 1; transform: translateY(0) scale(1.01, 0.985); animation-timing-function: var(--ease-soft); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes podium-sweep {
+  from { transform: skewX(-12deg) translateX(0); }
+  to { transform: skewX(-12deg) translateX(480%); }
+}
+
+/* Places below the podium, in two ruled columns */
+.final-list {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--list-rows, 4), auto);
+  grid-auto-flow: column;
+  column-gap: 4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.final-list .board-row {
+  padding: 0.45rem 0;
+  font-size: 2.25rem;
+}
+
+.final-list .board-score {
+  font-size: 2rem;
+}
+
+.final-list .board-row.waiting {
+  visibility: hidden;
+}
+
+.final-list .board-row.landing,
+.final-list .board-row.appear {
+  animation: row-in 0.3s var(--ease-soft) both;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .podium-slot.landing .podium-card,
+  .podium-slot.appear .podium-card,
+  .final-list .board-row.landing,
+  .final-list .board-row.appear { animation: none; }
+  .podium-slot.landing .podium-card::after { display: none; }
+}
+
+/* The painted sky: see scene.css. The content sits in front of it. */
+.tv {
+  isolation: isolate;
+}
+
+/* The title cards sit on a bright summer scene, darkened on the left behind the words. */
+.tv[data-mood='day'] .title-card {
+  text-shadow: 0 0.15rem 1.2rem rgba(4, 8, 20, 0.9);
+}
+
+.tv[data-mood='day'] .title-rule {
+  color: var(--panel-ink);
+}
+
+.title-card.has-gif {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4rem;
+}
+
+.title-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.title-gif {
+  --tilt: 3deg;
+  width: 44rem;
+  margin-right: 2rem;
+}
+
+/* Standings: the board, with a GIF pinned beside it */
+.standings-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4rem;
+}
+
+.standings-gif {
+  --tilt: -2.5deg;
+  align-self: start;
+  width: 36rem;
+  margin-top: 3rem;
+}
+
+/* A box behind the board, so the scores read against the picture, clear of the title above. */
+.tv[data-screen='standings'] .board {
+  margin-top: var(--text-box-gap);
+  padding: 0.5rem 2rem 0;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+}
+
+.tv[data-screen='standings'] .board-row:last-child {
+  border-bottom: 0;
+}
+
+.standings-body .board {
+  align-self: start;
+  max-height: 100%;
+}
+
+/* Small grey lines need a little lift off the painted sky. */
+.tv .tv-kicker,
+.tv .lobby-sub,
+.tv .tv-round-line,
+.tv .tv-word-rule,
+.tv .names-empty,
+.tv .board-more,
+.tv .names li {
+  text-shadow: 0 0.1rem 0.6rem rgba(5, 8, 20, 0.85);
+}
+
+/* Frosted podium cards, so the names stand out from the festival behind them. */
+.tv[data-mood='lanterns'] .podium-slot:not(.waiting) .podium-card {
+  background: linear-gradient(180deg, var(--tint-top), var(--tint-bottom)), var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+}
+
+.tv[data-mood='lanterns'] .final-list {
+  padding: 0 1.5rem;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+}
+
+.tv[data-mood='lanterns'] .podium-slot.waiting .podium-card {
+  background: var(--text-box);
+}
+
+/*
+ * Boxes behind the smaller words, so they read against the film stills. Each box is a
+ * translucent, frosted panel that hugs its own text, with real padding, so neighbouring
+ * boxes keep a gap between them instead of running into each other.
+ *
+ * Big titles, the player count and the QR code don't get one: they're large enough to read
+ * with a soft shadow, and a slab behind them hides the picture for no gain.
+ */
+.tv {
+  --text-box: rgba(10, 12, 28, 0.5);
+  /* Blur is redrawn every frame while the scenery drifts, so keep it modest for TV hardware. */
+  --text-box-blur: blur(0.6rem);
+  --text-box-radius: 12px;
+  --text-box-gap: 1.5rem;
+  --title-glow: 0 0.15rem 1.4rem rgba(4, 8, 20, 0.85), 0 0 0.4rem rgba(4, 8, 20, 0.55);
+}
+
+.tv[data-screen='lobby'] .lobby-caption,
+.tv[data-screen='lobby'] .names,
+.tv[data-screen='lobby'] .names-empty,
+.title-card .title-rule {
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+}
+
+/* Big words stand on the picture with a soft shadow instead. */
+.tv .tv-title,
+.tv .tv-count,
+.title-card .title-numeral,
+.title-card .title-name {
+  text-shadow: var(--title-glow);
+}
+
+/* The header's rule and the boxes under it keep apart. */
+.tv[data-screen='lobby'] .lobby-body {
+  padding-top: var(--text-box-gap);
+}
+
+.lobby-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+  text-wrap: pretty;
+}
+
+/* Each box fits its own words rather than stretching to the foot of the screen. */
+.tv[data-screen='lobby'] .names,
+.tv[data-screen='lobby'] .names-empty {
+  align-self: start;
+  padding: 0.5rem 2rem 1rem;
+}
+
+.tv[data-screen='lobby'] .names-empty {
+  justify-self: start;
+  padding: 1rem 1.75rem;
+}
+
+/* The rule under a game's name, and the words on the connecting screens */
+.title-card .title-rule {
+  align-self: start;
+  max-width: 100%;
+  padding: 0.75rem 1.5rem 0.9rem;
+}
+
+/* During a round, one large panel behind everything on screen */
+.tv[data-screen='write']::before,
+.tv[data-screen='show']::before,
+.tv[data-screen='vote']::before,
+.tv[data-screen='reveal']::before,
+.tv[data-screen='guess']::before,
+.tv[data-screen='pinReveal']::before,
+.tv[data-screen='pick']::before,
+.tv[data-screen='pickReveal']::before {
+  content: '';
+  position: absolute;
+  inset: 1.75rem 3.5rem 1.5rem;
+  z-index: -1;
+  border-radius: 14px;
+  background: rgba(10, 12, 28, 0.55);
+  /* Nearly the whole screen, so only a light blur. */
+  backdrop-filter: blur(0.3rem);
+}
+
+/* More photos after a round: a collage of up to five, pinned up like prints */
+.tv[data-screen='gallery'] .gallery-head {
+  border-bottom: 0;
+}
+
+.tv[data-screen='gallery'] .tv-round-line {
+  padding: 0.4rem 1.25rem;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+}
+
+.gallery {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-top: 1rem;
+}
+
+.gallery-title {
+  flex: none;
+  overflow-wrap: anywhere;
+  font-family: var(--font-stage);
+  font-size: 4rem;
+  font-weight: 500;
+  line-height: 1.1;
+  text-shadow: var(--title-glow);
+}
+
+.gallery-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 2rem;
+  margin: 0;
+  padding: 0 0 1rem;
+  list-style: none;
+}
+
+.gallery-grid.count-1 { grid-template-columns: 1fr; }
+.gallery-grid.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gallery-grid.count-3 { grid-template-columns: 3fr 2fr; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.gallery-grid.count-3 .gallery-tile:first-child { grid-row: span 2; }
+.gallery-grid.count-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.gallery-grid.count-5 { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.gallery-grid.count-5 .gallery-tile { grid-column: span 2; }
+.gallery-grid.count-5 .gallery-tile:nth-child(n + 4) { grid-column: span 3; }
+
+.gallery-tile {
+  --tilt: -1.2deg;
+  min-width: 0;
+  min-height: 0;
+  /* The print sizes itself against this space, to keep its photo's shape. */
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: print-in 0.6s var(--ease-soft) both;
+}
+
+.gallery-tile:nth-child(even) { --tilt: 1.4deg; }
+.gallery-tile:nth-child(3n) { --tilt: -0.6deg; }
+
+@keyframes print-in {
+  from { opacity: 0; transform: translateY(2.5rem) rotate(calc(var(--tilt) * -3)) scale(0.92); }
+  to { opacity: 1; transform: rotate(var(--tilt)); }
+}
+
+.gallery-open {
+  --mat: 0.75rem;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: var(--mat);
+  border: 0;
+  border-radius: 3px;
+  background: #fbf7ec;
+  box-shadow: 0 1.25rem 2.5rem rgba(0, 0, 0, 0.4), 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25);
+  cursor: zoom-in;
+}
+
+/* As big as fits in its space with the whole photo showing. */
+.gallery-open.shaped {
+  width: min(100cqw, (100cqh - 2 * var(--mat)) * var(--ratio) + 2 * var(--mat));
+  height: min(100cqh, (100cqw - 2 * var(--mat)) / var(--ratio) + 2 * var(--mat));
+}
+
+.gallery-open img,
+.gallery-close img,
+.gallery-open video,
+.gallery-close video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #d9d4c6;
+}
+
+.gallery-open:focus-visible,
+.gallery-close:focus-visible {
+  outline: 2px solid var(--celadon);
+  outline-offset: 4px;
+}
+
+.gallery-open .photo-missing,
+.gallery-close .photo-missing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2);
+  font-size: 1.75rem;
+}
+
+/* One photo filling the screen */
+.gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 5rem;
+  background: rgba(4, 6, 12, 0.9);
+  animation: fade-in 0.25s ease-out both;
+}
+
+.gallery-close {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-out;
+}
+
+.gallery-close img,
+.gallery-close video {
+  object-fit: contain;
+  background: none;
+}
+
+.gallery-count {
+  position: absolute;
+  top: 1.5rem;
+  right: 5rem;
+  padding: 0.25rem 1rem;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  color: var(--panel-ink);
+  font-size: 1.5rem;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-tile,
+  .gallery-lightbox { animation: none; }
+}
+
+/* Trip tips: the last page, what you'd tell a friend going next, beside a map of the places */
+.tips-head {
+  padding-bottom: 1.5rem;
+  border-bottom: 0;
+}
+
+.tips-head .tv-title {
+  font-size: 4.5rem;
+  text-shadow: var(--title-glow);
+}
+
+.tips-phone-note {
+  flex: none;
+  padding: 0.4rem 1.25rem;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+  color: var(--panel-ink-2);
+  font-size: 1.75rem;
+}
+
+.tips-board {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* The list fits the screen however many tips there are, rather than growing past it. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 2.5rem;
+}
+
+.tips-board.mapped {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+}
+
+.tips-list {
+  min-height: 0;
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tips-list.many {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tip-card {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  gap: 1.25rem;
+  overflow: hidden;
+  padding: 1rem 1.25rem;
+  border-radius: var(--text-box-radius);
+  background: var(--text-box);
+  backdrop-filter: var(--text-box-blur);
+  animation: tip-in 0.6s var(--ease-soft) both;
+}
+
+@keyframes tip-in {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.tip-photo {
+  flex: none;
+  align-self: stretch;
+  width: 9rem;
+  min-height: 0;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #3a3b35;
+}
+
+.tip-words {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.tip-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--celadon);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.tip-number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.25rem;
+  letter-spacing: 0;
+}
+
+.tip-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-family: var(--font-stage);
+  font-size: 2rem;
+  line-height: 1.25;
+}
+
+.tips-list.many .tip-text {
+  -webkit-line-clamp: 4;
+  font-size: 1.75rem;
+}
+
+.tips-list.many .tip-photo {
+  width: 8rem;
+}
+
+.tip-places {
+  overflow: hidden;
+  color: var(--panel-ink-2);
+  font-size: 1.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tips-map {
+  border-radius: var(--text-box-radius);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.35);
+  animation: tip-in 0.8s var(--ease-soft) 0.3s both;
+}
+
+.tips-map .tip-mark {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-card,
+  .tips-map { animation: none; }
+}
+
+/* The background music's player: there for its sound only. */
+.tv-music {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 24rem;
+  aspect-ratio: 16 / 9;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tv-music iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

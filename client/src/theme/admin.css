@@ -1,0 +1,886 @@
+/* The deck builder: a desk page for the laptop. Unlike the phones, the whole page scrolls. */
+html[data-surface='paper'][data-page='desk'] {
+  height: auto;
+  overflow: auto;
+  overscroll-behavior: auto;
+  /* Keeps a field you tab to from landing under the pinned bar. */
+  scroll-padding-top: 96px;
+}
+
+html[data-surface='paper'][data-page='desk'] body {
+  height: auto;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
+html[data-page='desk'] #root {
+  height: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.desk {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 96px;
+}
+
+.desk a,
+.editor-bar a {
+  color: var(--ink);
+}
+
+.desk-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.desk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.space-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+  padding: 16px;
+  margin-bottom: 24px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+}
+
+.space-label {
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.space-code {
+  font-family: var(--font-stage);
+  font-size: 36px;
+  letter-spacing: 0.15em;
+}
+
+.space-details .key {
+  margin-top: 12px;
+}
+
+.desk-message {
+  min-height: 24px;
+  margin-top: 8px;
+  color: var(--error);
+}
+
+/* Letter spacing because this font's kerning pulls some digit pairs together at small sizes. */
+.desk-hint {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.desk-error {
+  margin-top: 4px;
+  color: var(--error);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.desk-count {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.desk-empty {
+  padding: 24px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.desk-empty p {
+  margin-bottom: 16px;
+}
+
+/* ---------- Keys: the same hardware as the phone's button, at laptop size ---------- */
+.key {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 16px;
+  overflow: hidden;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fdfbf6, #efebe0);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 0 #b7b2a5;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.key .lbl {
+  position: relative;
+  z-index: 1;
+}
+
+.key.down {
+  box-shadow: inset 0 2px 4px rgba(42, 41, 38, 0.28);
+}
+
+.key.down .lbl {
+  transform: translateY(1px);
+}
+
+.key.primary {
+  border-color: #0e0e0d;
+  background: linear-gradient(180deg, #2c2b28, #0e0e0d);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 0 #000;
+  color: var(--paper);
+}
+
+.key.primary.down {
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.7);
+}
+
+.key:disabled {
+  border-color: var(--hair);
+  background: var(--paper);
+  box-shadow: none;
+  color: #77736a;
+  cursor: default;
+}
+
+.key:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.confirm-slot {
+  position: relative;
+  display: inline-grid;
+}
+
+.confirm-slot > * {
+  grid-area: 1 / 1;
+}
+
+.confirm-sizer {
+  visibility: hidden;
+  height: 0;
+  padding: 0 17px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- Deck list ---------- */
+.deck-rows {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deck-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.deck-row:last-child {
+  border-bottom: 1px solid var(--hair);
+}
+
+.deck-row-main {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.deck-row-title {
+  font-family: var(--font-stage);
+  font-size: 22px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.deck-row-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.desk-rooms {
+  margin-top: 48px;
+}
+
+.desk-rooms ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desk-rooms li {
+  padding: 8px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.room-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.room-row a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Problems ---------- */
+.deck-problems {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--hair);
+  border-left: 3px solid var(--field-border);
+  border-radius: 4px;
+  background: var(--field);
+}
+
+.deck-problems.pressed,
+.deck-row .deck-problems,
+.upload-lines + .deck-problems {
+  border-left-color: var(--error);
+}
+
+.deck-problems ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.ready-line {
+  color: var(--ink-2);
+}
+
+/* ---------- Editor ---------- */
+.editor-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--hair);
+  background: var(--paper);
+}
+
+.editor-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 912px;
+  margin: 0 auto;
+}
+
+.back-link {
+  flex: none;
+}
+
+.save-line {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  text-align: right;
+}
+
+.save-line.wrong {
+  color: var(--error);
+}
+
+.editor-start {
+  flex: none;
+  width: 180px;
+}
+
+.spoiler-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.desk-section {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hair);
+}
+
+.desk-section-title {
+  margin: 0 0 12px;
+  font-family: var(--font-stage);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.desk .field-input {
+  height: 44px;
+  font-size: 16px;
+}
+
+.desk textarea.field-input {
+  height: auto;
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.desk select.field-input {
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 32px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px 24px;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding-top: 28px;
+}
+
+.check-row input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accent-input {
+  flex: none;
+  width: 64px;
+  height: 44px;
+  padding: 4px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  background: var(--field);
+  cursor: pointer;
+}
+
+.timing {
+  margin-top: 16px;
+}
+
+.timing > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.timing > summary::-webkit-details-marker {
+  display: none;
+}
+
+.timing > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--ink-2);
+  transition: transform 0.15s var(--ease-soft);
+}
+
+.timing[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.timing > summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.timing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 16px;
+  margin-top: 4px;
+}
+
+.game-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.game-head .desk-section-title {
+  margin: 0;
+}
+
+.game-number {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-keys {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.row-number {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 44px;
+  text-align: right;
+}
+
+/* ---------- Word rows ---------- */
+.word-head,
+.word-row {
+  display: grid;
+  grid-template-columns: 24px minmax(120px, 1fr) minmax(200px, 2fr) auto;
+  gap: 8px 12px;
+}
+
+.word-head {
+  margin-bottom: 4px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.word-rows,
+.photo-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.word-row {
+  align-items: start;
+  padding: 8px 0;
+}
+
+.add-row {
+  margin-top: 8px;
+}
+
+/* A word's pronunciation clip, under its word and definition. */
+.clip-line {
+  grid-column: 2 / 4;
+}
+
+.clip-fields {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 96px 96px auto;
+  align-items: end;
+  gap: 8px 12px;
+}
+
+.clip-fields .desk-field {
+  margin: 0;
+}
+
+.clip-keys {
+  display: flex;
+  gap: 8px;
+}
+
+.clip-time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 356 by 200, the smallest height YouTube allows for its player. */
+.clip-preview {
+  display: block;
+  width: 356px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--hair);
+}
+
+/* ---------- Photos ---------- */
+.photo-row {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.photo-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 4px;
+  background: var(--hair);
+  object-fit: cover;
+}
+
+/* A video's poster, marked so it isn't mistaken for a photo. */
+.media-thumb {
+  position: relative;
+  display: block;
+}
+
+.media-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Pick one: four lettered answers, with a radio to mark the right one */
+.choice-fields {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 0;
+  border: 0;
+}
+
+.choice-fields > legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.choice-field {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.choice-field-letter {
+  color: var(--ink-2);
+  font-weight: 500;
+  text-align: center;
+}
+
+.choice-field-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.choice-field-right input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.choice-field:has(input[type='radio']:checked) .choice-field-right {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.photo-fields .key {
+  margin-top: 8px;
+}
+
+.photo-picker {
+  grid-column: 1 / -1;
+}
+
+.picker-map {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--hair);
+  border-radius: 4px;
+  background: var(--hair);
+}
+
+.picker-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.picker-row .desk-field {
+  flex: 1;
+}
+
+.picker-row .key {
+  margin-top: 29px;
+}
+
+.caption-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.caption-card .row-keys {
+  margin-top: 8px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 24px 16px;
+  border: 1px dashed var(--field-border);
+  border-radius: 6px;
+  background: var(--field);
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.dropzone.over {
+  border-style: solid;
+  border-color: var(--ink);
+  background: #f0ebdd;
+}
+
+.dropzone:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.dropzone-main {
+  font-weight: 500;
+}
+
+.upload-lines:not(:empty) {
+  position: sticky;
+  bottom: 0;
+  margin-top: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--hair);
+  background: var(--paper);
+  color: var(--ink-2);
+}
+
+@media (max-width: 720px) {
+  .desk {
+    padding: 16px 16px 64px;
+  }
+
+  .editor-bar {
+    padding: 8px 16px;
+  }
+
+  .editor-bar-inner {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .save-line {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .editor-start {
+    width: 140px;
+    margin-left: auto;
+  }
+
+  .word-head {
+    display: none;
+  }
+
+  .word-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .word-row .row-keys {
+    grid-column: 2;
+  }
+
+  .word-row .word-field {
+    grid-column: 2;
+  }
+
+  .clip-line {
+    grid-column: 2;
+  }
+
+  .clip-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .clip-fields > .desk-field:first-child,
+  .clip-keys {
+    grid-column: 1 / -1;
+  }
+
+  .photo-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .photo-row > .row-keys {
+    grid-column: 1 / -1;
+  }
+
+  .picker-map {
+    height: 320px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropzone,
+  .timing > summary::before {
+    transition: none;
+  }
+}
+
+/* More photos shown on the TV after a photo's reveal */
+.extras {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+}
+
+.photo-fields .extras {
+  margin-top: 16px;
+}
+
+.extras-head {
+  font-weight: 500;
+}
+
+.extras-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.extras-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.extras-item .key {
+  width: 100%;
+  margin-top: 0;
+}
+
+.dropzone.compact {
+  margin-top: 8px;
+  padding: 12px;
+}
+
+/* ---------- Trip tips ---------- */
+.tip-photo-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tip-photo-slot .dropzone.compact {
+  margin-top: 0;
+  aspect-ratio: 4 / 3;
+  justify-content: center;
+  text-align: center;
+}
+
+.tip-photo-slot .key {
+  width: 100%;
+}
+
+.tip-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tip-link-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tip-places-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tip-place-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.photo-fields .tip-place-edit .key {
+  margin-top: 0;
+}

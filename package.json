@@ -1,0 +1,71 @@
+{
+  "name": "presentation-game",
+  "version": "0.1.0",
+  "description": "A live party game for presenting a trip, a hobby or anything else: guests play on their phones while the TV runs the show.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dillonco/presentation-game.git"
+  },
+  "keywords": [
+    "party-game",
+    "multiplayer",
+    "trivia",
+    "travel",
+    "socket.io",
+    "react"
+  ],
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "concurrently -k -n server,client \"tsx watch server/index.ts\" \"vite\"",
+    "build": "vite build && esbuild server/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/index.js && rm -rf dist/outlines && cp -r shared/outlines dist/outlines && rm -rf dist/server/sample-photos && cp -r server/sample-photos dist/server/sample-photos && node scripts/compress-client.mjs",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --dir tests/unit",
+    "test:integration": "vitest run --dir tests/integration",
+    "test:e2e": "playwright test",
+    "test:load": "tsx tests/load/run.ts",
+    "test:restart": "tsx tests/load/restart.ts",
+    "capture": "tsx scripts/capture/capture.ts && node scripts/capture/gifs.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@fastify/static": "^10.1.10",
+    "fastify": "^5.0.0",
+    "socket.io": "^4.8.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@fontsource/dotgothic16": "^5.3.1",
+    "@fontsource/zen-kaku-gothic-new": "^5.3.1",
+    "@fontsource/zen-old-mincho": "^5.3.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "dseg": "^0.46.0",
+    "esbuild": "^0.24.0",
+    "exifr": "^7.1.3",
+    "heic-to": "^1.6.7",
+    "maplibre-gl": "^4.7.0",
+    "qrcode-generator": "^2.0.4",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "socket.io-client": "^4.8.0",
+    "subset-font": "^2.9.0",
+    "topojson-client": "^3.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}

@@ -1,0 +1,88 @@
+/* The style guide is a tall page, unlike the game screens. */
+html[data-surface='paper'][data-page='styleguide'],
+html[data-surface='paper'][data-page='styleguide'] body,
+html[data-page='styleguide'] #root {
+  height: auto;
+  overflow: visible;
+}
+
+.sg {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+.sg-head {
+  margin-bottom: 32px;
+  color: var(--ink-2);
+}
+
+.sg-head h1 {
+  color: var(--ink);
+  font-family: var(--font-stage);
+  font-size: 32px;
+  font-weight: 500;
+}
+
+.sg-reset {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sg-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+}
+
+.sg-item {
+  margin: 0;
+}
+
+.sg-item figcaption {
+  margin-bottom: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.sg-phone {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: 100%;
+  height: 640px;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.sg-pad {
+  padding: 16px;
+}
+
+.sg-grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sg-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 2px 4px;
+}
+
+.sg-prompt {
+  margin-bottom: 16px;
+  font-family: var(--font-stage);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}

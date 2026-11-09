@@ -1,0 +1,21 @@
+# Runs The Presentation Game on one machine, keeping decks and photos in a Docker volume.
+#
+#   npm run setup        # once, to make .env with a presenter password
+#   docker compose up -d
+#
+# Then open http://<this machine>:3000/admin. Phones need to reach the same address, so use
+# the machine's network address rather than localhost when you put the game on the TV.
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - presentation-game-data:/data
+    restart: unless-stopped
+
+volumes:
+  presentation-game-data:

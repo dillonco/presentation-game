@@ -1,0 +1,501 @@
+/* ---------- Press wash, shared by the button and the option box ---------- */
+.wash {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: wash-in 0.3s var(--ease-soft) both;
+  transition: opacity 0.24s ease-out;
+}
+
+.wash.fade {
+  opacity: 0;
+}
+
+@keyframes wash-in {
+  from { transform: scale(0.02); }
+  to { transform: scale(1); }
+}
+
+/* ---------- Action button: a 90s hardware key ---------- */
+.act {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 100%;
+  height: 50px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2c2b28, #0e0e0d);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 0 #000;
+  color: var(--digit);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  /* The outer edge never moves: no scaling or shifting on press. */
+  transform: none;
+}
+
+.act .wash {
+  background: linear-gradient(180deg, #c25a3c, #97402b);
+}
+
+.act .lbl {
+  position: relative;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.act.down,
+.act[aria-busy='true'] {
+  box-shadow: inset 0 3px 7px rgba(0, 0, 0, 0.7);
+}
+
+.act.down .lbl,
+.act[aria-busy='true'] .lbl {
+  transform: translateY(1px);
+}
+
+.act[aria-busy='true'] {
+  cursor: progress;
+}
+
+.act .line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+}
+
+.act .line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: var(--sun-1);
+  animation: line-run 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes line-run {
+  from { transform: translateX(-10%); }
+  to { transform: translateX(160%); }
+}
+
+.act:focus-visible,
+.opt:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------- Text field ---------- */
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.field-input {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  /* 16px or more stops iOS zooming in on focus. */
+  font-size: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.12s;
+}
+
+textarea.field-input {
+  height: auto;
+  padding: 12px;
+  line-height: 1.4;
+  resize: none;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.field-input[aria-invalid='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* ---------- Status area: always reserved, so the button can't move ---------- */
+.status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.status.error {
+  color: var(--error);
+}
+
+.seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  font-family: var(--font-stage);
+  font-size: 20px;
+  line-height: 1;
+  transform: rotate(-6deg);
+  animation: stamp 0.26s var(--ease-soft) both;
+}
+
+@keyframes stamp {
+  from { transform: rotate(-6deg) scale(1.7); opacity: 0; }
+  to { transform: rotate(-6deg) scale(1); opacity: 1; }
+}
+
+.locked-text {
+  display: block;
+  color: var(--ink);
+  font-family: var(--font-stage);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.locked-sub {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+/* ---------- Option box ---------- */
+.opts {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.opt {
+  position: relative;
+  /* In a scrolling list, or a long answer gets squashed and cut off instead of the list scrolling. */
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid #cbc6b7;
+  border-radius: 6px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fffdf8, #efebdf);
+  box-shadow: inset 0 1px 0 #fff, 0 2px 0 #cfcabc;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.opt .wash {
+  background: #f2d5c2;
+}
+
+.opt > .chip,
+.opt > .opt-text {
+  position: relative;
+}
+
+.opt > .opt-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+}
+
+.opt.down {
+  box-shadow: inset 0 2px 5px rgba(42, 41, 38, 0.2);
+}
+
+.opt[aria-checked='true'] {
+  border-color: #8e3d28;
+  background: linear-gradient(180deg, #f9eadf, #f2dbcb);
+  box-shadow: inset 0 0 0 1px #8e3d28, 0 2px 0 #c9a18f;
+  font-weight: 500;
+}
+
+.chip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #cbc6b7;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #fff, #e6e1d4);
+  box-shadow: 0 1px 0 #cfcabc;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.opt[aria-checked='true'] .chip {
+  border-color: #7e3522;
+  background: linear-gradient(180deg, #bc5639, #963e29);
+  box-shadow: none;
+  color: #fff;
+}
+
+/* ---------- Timer strip ---------- */
+.strip {
+  flex: none;
+  background: var(--charcoal);
+  color: var(--panel-ink);
+}
+
+.strip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 16px;
+}
+
+.strip-digits {
+  color: var(--digit);
+  font-family: var(--font-digit);
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.strip-digits.last {
+  color: var(--digit-last);
+}
+
+.strip-label {
+  overflow: hidden;
+  color: var(--panel-ink-2);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sunbar {
+  position: relative;
+  height: 6px;
+  background: linear-gradient(90deg, var(--sun-1), var(--sun-2) 55%, var(--sun-3));
+}
+
+.sunbar-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* A faint band of light sweeps along every 4 seconds. The only continuous motion. */
+.sunbar-sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 18%;
+  background: linear-gradient(90deg, transparent, rgba(255, 244, 214, 0.35), transparent);
+  animation: sweep 4s linear infinite;
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(560%); }
+}
+
+/* Covers the unfilled part. It moves right on the graphics card, so typing stays smooth. */
+.sunbar-cover {
+  position: absolute;
+  inset: 0;
+  background: var(--panel-hair);
+  transform: translateX(var(--from, 0%));
+  animation: sun-go var(--ms, 0ms) linear forwards;
+}
+
+@keyframes sun-go {
+  from { transform: translateX(var(--from, 0%)); }
+  to { transform: translateX(100%); }
+}
+
+.sunbar-sun-track {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(var(--from, 0%));
+  animation: sun-go var(--ms, 0ms) linear forwards;
+}
+
+.sunbar-sun {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #e5672b;
+  box-shadow: 0 0 6px 1px rgba(229, 103, 43, 0.4);
+}
+
+.sunbar.paused .sunbar-cover,
+.sunbar.paused .sunbar-sun-track {
+  animation: none;
+}
+
+.sunbar.paused .sunbar-sweep {
+  display: none;
+}
+
+.sunbar.done .sunbar-sweep,
+.sunbar.done .sunbar-sun {
+  display: none;
+}
+
+.sunbar.done {
+  animation: sun-flash 0.5s ease-out;
+}
+
+@keyframes sun-flash {
+  0% { filter: brightness(1); }
+  30% { filter: brightness(1.5); }
+  100% { filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wash { animation: none; }
+  .seal { animation: none; }
+  .sunbar-sweep { display: none; }
+  .sunbar.done { animation: none; }
+  .act .line::after { animation: none; width: 100%; }
+}
+
+/* A thin crosshair with a soft centre, large enough for a thumb. Also used by the deck builder. */
+.pin-mark {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 30%, transparent) 0 8px,
+    transparent 9px
+  );
+  cursor: grab;
+}
+
+.pin-mark::before,
+.pin-mark::after {
+  content: '';
+  position: absolute;
+  background: var(--accent);
+}
+
+.pin-mark::before {
+  top: 21px;
+  left: 0;
+  width: 44px;
+  height: 2px;
+}
+
+.pin-mark::after {
+  top: 0;
+  left: 21px;
+  width: 2px;
+  height: 44px;
+}
+
+/* The drawn country, when there's no map engine. */
+.map-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.outline-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.outline-land {
+  fill: #f5f2ea;
+  stroke: #8e8a7e;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.outline-target {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.outline-pin {
+  fill: #2a2926;
+  fill-opacity: 0.75;
+}
+
+/* More specific than the map library's own styles, which load later and would set this to relative. */
+.map-stage > .map-canvas,
+.tv-map > .map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* A numbered place on the trip tips map, matching its tip in the list. */
+.tip-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid #f5f2ea;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.tips-map > .map-canvas,
+.tips-phone-map > .map-canvas {
+  position: absolute;
+  inset: 0;
+}
