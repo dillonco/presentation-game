@@ -2,7 +2,7 @@
 
 **A live party game for showing friends your trip.** Put it on the TV, and your friends scan a QR code and play on their phones: guess the meaning of words you picked up, drop pins where your photos were taken, caption your best shots, and vote on each other's answers. The night ends on a podium and a page of tips for anyone going next.
 
-You build the night in a deck: your words, your photos, your country. Nobody needs an account or an app. Use a hosted copy, or run your own on one small server.
+You build the night in a deck: your words, your photos, your country. Nobody needs an account or an app. [**Play it now**](https://f398c06c-874f-4c71-b978-f0df5600df35.apps.kiteware.com) on the hosted copy, or run your own on one small server.
 
 ![A TV and a phone playing Define it](docs/media/hero.gif)
 
@@ -52,7 +52,11 @@ The podium lands one place at a time, and each phone learns its place only when 
   </tr>
 </table>
 
-## Try it in two minutes
+## Play it now
+
+Open **[the hosted copy](https://f398c06c-874f-4c71-b978-f0df5600df35.apps.kiteware.com)**, press **Make my space**, then **Add the sample deck** and **Start game**. Put that page on the TV, and friends join by scanning the QR code or typing the 6-letter code on the home page. No account, no install.
+
+## Run it yourself in two minutes
 
 You need [Node.js 22](https://nodejs.org) or newer.
 
