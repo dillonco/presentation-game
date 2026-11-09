@@ -21,6 +21,7 @@ import type {
 } from '../../shared/protocol.js';
 import type { AdminAuth } from '../auth.js';
 import type { ActionResult } from '../games/write-vote.js';
+import { visitorKey } from '../client-address.js';
 import { TokenBucket } from './rate-limit.js';
 import type { RoomManager } from './manager.js';
 import { hashToken, type ClosedRequest, type Room } from './room.js';
@@ -33,6 +34,8 @@ const MAX_CONNECTIONS = 500;
  * who knows a single room's link can't fill the whole server and lock every other game out.
  */
 export const MAX_ROOM_CONNECTIONS = 150;
+/** Connections from one visitor address, when a trusted proxy says what it is. */
+export const MAX_ADDRESS_CONNECTIONS = 120;
 const DEFAULT_TICK_MS = 100;
 
 interface SocketState {
@@ -54,6 +57,11 @@ const tokenChannel = (roomId: string, tokenHash: string) => `token:${roomId}:${t
 export interface Sessions {
   /** Tells everyone in a deleted room that the game is over, then lets them go. */
   endRoom(roomId: string): void;
+  /**
+   * Lets go of every TV connected to these rooms, so a device whose session was just revoked
+   * stops receiving the game. A TV that still has a valid session simply connects again.
+   */
+  dropHosts(roomIds: string[]): void;
   close(): void;
 }
 
@@ -61,8 +69,18 @@ export function registerSessions(
   io: Server,
   rooms: RoomManager,
   auth: AdminAuth,
-  options: { tickMs?: number; maxRoomConnections?: number } = {},
+  options: {
+    tickMs?: number;
+    maxRoomConnections?: number;
+    /** The visitor's address, or null when it can't be known (no trusted proxy). */
+    addressOf?: (socket: Socket) => string | null;
+    maxAddressConnections?: number;
+  } = {},
 ): Sessions {
+  const addressOf = options.addressOf ?? (() => null);
+  const maxAddressConnections = options.maxAddressConnections ?? MAX_ADDRESS_CONNECTIONS;
+  /** Open connections per visitor address, when addresses are known. */
+  const addressConnections = new Map<string, number>();
   const maxRoomConnections = options.maxRoomConnections ?? MAX_ROOM_CONNECTIONS;
   const pendingBroadcasts = new Map<string, NodeJS.Timeout>();
   /** Open guest connections per room, counted from when they connect until they close. */
@@ -290,7 +308,7 @@ export function registerSessions(
     on(socket, 'host:hello', emptySchema, (_payload, room) => ({ ok: true, view: room.hostView() }));
     on(socket, 'host:command', hostCommandSchema, (command, room) => {
       // Checked on every command too, so an expired session can't keep driving the game.
-      if (auth.presenterSpace(socket.handshake.headers.cookie) !== room.space) return { ok: false, code: 'unauthorized' };
+      if (auth.presenterSpace(socket.handshake.headers) !== room.space) return { ok: false, code: 'unauthorized' };
       return runCommand(command, room);
     });
   }
@@ -299,6 +317,11 @@ export function registerSessions(
     const handshake = handshakeSchema.safeParse(socket.handshake.auth);
     if (!handshake.success) return next(new Error('bad_request'));
     if (io.engine.clientsCount > MAX_CONNECTIONS) return next(new Error('slow_down'));
+    // A whole party can share one address on venue wifi, so this is generous. It stops one
+    // machine from taking every connection the server has.
+    const found = addressOf(socket);
+    const address = found && visitorKey(found);
+    if (address && (addressConnections.get(address) ?? 0) >= maxAddressConnections) return next(new Error('slow_down'));
     const room = rooms.get(handshake.data.room);
     if (!room) return next(new Error('room_missing'));
     // Only guests count, so a crowd of strangers can never lock the signed-in TV out of its own game.
@@ -309,7 +332,7 @@ export function registerSessions(
       const { origin, host } = socket.handshake.headers;
       const sameOrigin = !origin || (URL.canParse(origin) && new URL(origin).host === host);
       // Only the presenter whose game it is can run it, not one from another space.
-      if (!sameOrigin || auth.presenterSpace(socket.handshake.headers.cookie) !== room.space) {
+      if (!sameOrigin || auth.presenterSpace(socket.handshake.headers) !== room.space) {
         return next(new Error('unauthorized'));
       }
     }
@@ -326,6 +349,16 @@ export function registerSessions(
 
   io.on('connection', (socket) => {
     const { roomId, role } = socket.data as SocketState;
+    const found = addressOf(socket);
+    const address = found && visitorKey(found);
+    if (address) {
+      addressConnections.set(address, (addressConnections.get(address) ?? 0) + 1);
+      socket.on('disconnect', () => {
+        const left = (addressConnections.get(address) ?? 1) - 1;
+        if (left > 0) addressConnections.set(address, left);
+        else addressConnections.delete(address);
+      });
+    }
     if (role === 'guest') {
       guestConnections.set(roomId, (guestConnections.get(roomId) ?? 0) + 1);
       socket.on('disconnect', () => {
@@ -363,6 +396,9 @@ export function registerSessions(
   ticker.unref();
 
   return {
+    dropHosts(roomIds) {
+      for (const roomId of roomIds) io.in(hostChannel(roomId)).disconnectSockets(true);
+    },
     endRoom(roomId) {
       const pending = pendingBroadcasts.get(roomId);
       if (pending) clearTimeout(pending);

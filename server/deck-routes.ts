@@ -18,7 +18,7 @@ import {
   type DeckContent,
   type StoredDeck,
 } from '../shared/deck.js';
-import { requireAdmin, spaceOf, type AdminAuth } from './auth.js';
+import { requireAdmin, setSessionCookie, SPACE_SESSION_SECONDS, spaceOf, type AdminAuth } from './auth.js';
 import { DeckStore, deckToSetup } from './decks.js';
 import { cleanJpeg, cleanVideo, MediaStore, newImageId, newVideoId, type ImageVariant } from './media.js';
 import { spotAllowed } from './outlines.js';
@@ -104,6 +104,10 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
   return async (scope: FastifyInstance) => {
     // Runs before the body is read, so a stranger can't make the server take in a large upload.
     scope.addHook('onRequest', requireAdmin(auth));
+    // Keeps a space that's being used from being cleared out as idle.
+    scope.addHook('preHandler', async (request) => {
+      if (spaces) await spaces.touch(spaceOf(request));
+    });
     scope.addContentTypeParser(
       'image/jpeg',
       { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
@@ -141,6 +145,18 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
       const found = spaces && space !== MAIN_SPACE ? await spaces.get(space) : null;
       if (!found || !spaces) return { space: null };
       return { space: { code: found.code, presenterKey: `${found.id}.${spaces.presenterKey(found.id)}` } };
+    });
+
+    // A new presenter link. Every other device signed in to this space is signed out, this one stays in.
+    scope.post('/api/admin/space/reset', async (request, reply) => {
+      const space = spaceOf(request);
+      const reset = spaces && space !== MAIN_SPACE ? await spaces.resetPresenterKey(space) : null;
+      if (!reset || !spaces) return reply.code(404).send({ error: 'not_found' });
+      // A TV signed in before the reset would otherwise keep receiving the game, answers included.
+      sessions.dropHosts(roomsOf(space).map((room) => room.id));
+      const session = auth.issue(space, SPACE_SESSION_SECONDS);
+      setSessionCookie(reply, request, session.value, session.maxAge);
+      return { space: { code: reset.code, presenterKey: `${reset.id}.${spaces.presenterKey(reset.id)}` } };
     });
 
     scope.get('/api/admin/rooms', async (request) => ({
@@ -273,7 +289,7 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
 
     // Checked before the body is read, so a full space can't send another 100 MB first.
     const roomForMore = async (request: FastifyRequest, reply: FastifyReply) => {
-      const space = auth.presenterSpace(request.headers.cookie);
+      const space = auth.presenterSpace(request.headers);
       if (!limits || !space) return;
       const release = reserve(space, 1);
       holding.set(request, release);
@@ -301,7 +317,7 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
     // ones still arriving, like photos, so parallel uploads can't slip past it.
     const holdingVideo = new WeakMap<FastifyRequest, () => void>();
     const roomForVideo = async (request: FastifyRequest, reply: FastifyReply) => {
-      const space = auth.presenterSpace(request.headers.cookie);
+      const space = auth.presenterSpace(request.headers);
       if (limits?.videos === undefined || !space) return;
       const release = reserve(`video:${space}`, 1);
       holdingVideo.set(request, release);

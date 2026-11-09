@@ -53,13 +53,24 @@ describe('AdminAuth', () => {
   it('finds the session among other cookies', () => {
     const auth = new AdminAuth({ password: 'open', sessionSecret: secret });
     const { value } = auth.issue();
-    expect(auth.isSignedIn(`other=1; tp_admin=${value}; more=2`)).toBe(true);
-    expect(auth.isSignedIn('other=1')).toBe(false);
-    expect(auth.isSignedIn(undefined)).toBe(false);
+    expect(auth.isSignedIn({ cookie: `other=1; tp_admin=${value}; more=2` })).toBe(true);
+    expect(auth.isSignedIn({ cookie: 'other=1' })).toBe(false);
+    expect(auth.isSignedIn({})).toBe(false);
+  });
+
+  it('over HTTPS, counts only the __Host- cookie, so one planted from a neighbouring app is ignored', () => {
+    const auth = new AdminAuth({ password: 'open', sessionSecret: secret });
+    const { value } = auth.issue();
+    const https = { 'x-forwarded-proto': 'https' };
+    expect(auth.isSignedIn({ ...https, cookie: `__Host-tp_admin=${value}` })).toBe(true);
+    expect(auth.isSignedIn({ ...https, cookie: `tp_admin=${value}` })).toBe(false);
+    // Plain HTTP, for a development server, uses the plain name.
+    expect(auth.isSignedIn({ cookie: `__Host-tp_admin=${value}` })).toBe(false);
   });
 
   it('says which space a session opens', () => {
     const auth = new AdminAuth({ password: 'open', sessionSecret: secret });
+    auth.useSpaceGenerations((space) => (space === 'abcdefghijklmnop' ? 0 : null));
     expect(auth.spaceOf(auth.issue().value)).toBe('main');
     expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
     expect(auth.spaceOf(auth.issue('not/a.space').value)).toBe(null);
@@ -67,9 +78,38 @@ describe('AdminAuth', () => {
 
   it('signs hosted spaces without a password, but never the main space', () => {
     const auth = new AdminAuth({ sessionSecret: secret });
+    auth.useSpaceGenerations(() => 0);
     expect(auth.enabled).toBe(false);
     expect(auth.canSign).toBe(true);
     expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
     expect(auth.spaceOf(auth.issue('main').value)).toBe(null);
+  });
+
+  it("ends a space's sessions when its presenter link is reset, and refuses spaces that don't exist", () => {
+    const auth = new AdminAuth({ sessionSecret: secret });
+    let generation: number | null = 0;
+    auth.useSpaceGenerations(() => generation);
+    const before = auth.issue('abcdefghijklmnop').value;
+    expect(auth.spaceOf(before)).toBe('abcdefghijklmnop');
+    generation = 1;
+    expect(auth.spaceOf(before)).toBe(null);
+    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
+    generation = null;
+    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe(null);
+  });
+
+  it("can't be talked into a newer generation by editing the cookie", () => {
+    const auth = new AdminAuth({ sessionSecret: secret });
+    let generation = 0;
+    auth.useSpaceGenerations(() => generation);
+    const [version, expires, space, , signature] = auth.issue('abcdefghijklmnop').value.split('.');
+    generation = 1;
+    expect(auth.spaceOf([version, expires, space, '1', signature].join('.'))).toBe(null);
+  });
+
+  it('signs every presenter out of the main space when the password changes', () => {
+    const value = new AdminAuth({ password: 'old-password', sessionSecret: secret }).issue().value;
+    expect(new AdminAuth({ password: 'old-password', sessionSecret: secret }).spaceOf(value)).toBe('main');
+    expect(new AdminAuth({ password: 'new-password', sessionSecret: secret }).spaceOf(value)).toBe(null);
   });
 });

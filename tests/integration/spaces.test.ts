@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { emptyDeck, type DeckContent } from '../../shared/deck.js';
 import { startHarness, type Harness } from './helpers.js';
+import { io as ioConnect } from 'socket.io-client';
 import { phoneVideo } from '../fixtures/mp4.js';
 
 const PHOTO = readFileSync('tests/fixtures/plain.jpg');
@@ -151,6 +152,107 @@ describe('hosted spaces', () => {
     const [id] = space.presenterKey.split('.');
     expect((await send('', 'POST', '/api/spaces/claim', { key: `${id}.wrong` })).status).toBe(404);
     expect((await send('', 'POST', '/api/spaces/claim', { key: 'junk' })).status).toBe(404);
+  });
+
+  it('resets the presenter link, signing out every other device but this one', async () => {
+    const one = await newSpace();
+    const read = async (cookie: string) =>
+      ((await (await call(cookie, '/api/admin/space')).json()) as { space: { presenterKey: string } }).space;
+    const { presenterKey: oldKey } = await read(one.cookie);
+    const other = await send('', 'POST', '/api/spaces/claim', { key: oldKey });
+    const otherCookie = other.headers.get('set-cookie')!.split(';')[0]!;
+    expect(await (await call(otherCookie, '/api/admin/me')).json()).toEqual({ signedIn: true });
+
+    const reset = await call(one.cookie, '/api/admin/space/reset', { method: 'POST' });
+    expect(reset.status).toBe(200);
+    const { space } = (await reset.json()) as { space: { presenterKey: string } };
+    expect(space.presenterKey).not.toBe(oldKey);
+    const fresh = reset.headers.get('set-cookie')!.split(';')[0]!;
+
+    // The device that reset it stays in, with its new cookie. Everyone else is out.
+    expect(await (await call(fresh, '/api/admin/me')).json()).toEqual({ signedIn: true });
+    expect(await (await call(one.cookie, '/api/admin/me')).json()).toEqual({ signedIn: false });
+    expect(await (await call(otherCookie, '/api/admin/me')).json()).toEqual({ signedIn: false });
+    // The old link no longer works, the new one does.
+    expect((await send('', 'POST', '/api/spaces/claim', { key: oldKey })).status).toBe(404);
+    expect((await send('', 'POST', '/api/spaces/claim', { key: space.presenterKey })).status).toBe(200);
+  });
+
+  it('lets go of TVs connected before the presenter link was reset', async () => {
+    const one = await newSpace();
+    const started = await call(one.cookie, '/api/admin/rooms', { method: 'POST' });
+    const { id: room } = (await started.json()) as { id: string };
+    const tv = await harness.host(room, one.cookie);
+    const dropped = new Promise((resolve) => tv.once('disconnect', resolve));
+    expect((await call(one.cookie, '/api/admin/space/reset', { method: 'POST' })).status).toBe(200);
+    expect(await dropped).toBe('io server disconnect');
+    // Its old session no longer gets it back in.
+    await expect(harness.host(room, one.cookie)).rejects.toThrow('unauthorized');
+  });
+
+  it('keeps spaces and their links across a restart', async () => {
+    const one = await newSpace();
+    const { space } = (await (await call(one.cookie, '/api/admin/space')).json()) as { space: { presenterKey: string } };
+    await harness.restart();
+    expect(await (await call(one.cookie, '/api/admin/me')).json()).toEqual({ signedIn: true });
+    expect((await send('', 'POST', '/api/spaces/claim', { key: space.presenterKey })).status).toBe(200);
+  });
+
+  describe('behind a trusted proxy', () => {
+    const from = (ip: string) => ({ method: 'POST', headers: { 'x-forwarded-for': ip } });
+
+    it('gives each visitor their own small allowance of new spaces', async () => {
+      await harness.stop();
+      harness = await startHarness({ hosted: true, trustProxy: 1 });
+      for (let i = 0; i < 3; i++) expect((await fetch(`${harness.url}/api/spaces`, from('203.0.113.1'))).status).toBe(200);
+      expect((await fetch(`${harness.url}/api/spaces`, from('203.0.113.1'))).status).toBe(429);
+      // Someone else isn't held up by them.
+      expect((await fetch(`${harness.url}/api/spaces`, from('203.0.113.2'))).status).toBe(200);
+      // A made-up address in front of the real one changes nothing.
+      expect((await fetch(`${harness.url}/api/spaces`, from('198.51.100.9, 203.0.113.1'))).status).toBe(429);
+    });
+
+    it('limits how many connections one address can hold', async () => {
+      await harness.stop();
+      harness = await startHarness({ hosted: true, trustProxy: 1, maxAddressConnections: 2 });
+      const room = await harness.createRoom();
+      const connect = (ip: string) =>
+        new Promise<void>((resolve, reject) => {
+          const socket = ioConnect(harness.url, {
+            auth: { room, role: 'guest' },
+            transports: ['websocket'],
+            reconnection: false,
+            forceNew: true,
+            extraHeaders: { 'x-forwarded-for': ip },
+          });
+          harness.sockets.push(socket);
+          socket.once('connect', () => resolve());
+          socket.once('connect_error', reject);
+        });
+      await connect('203.0.113.1');
+      await connect('203.0.113.1');
+      await expect(connect('203.0.113.1')).rejects.toThrow('slow_down');
+      await expect(connect('203.0.113.2')).resolves.toBeUndefined();
+    });
+  });
+
+  it("applies no per-visitor limit when there's no trusted proxy to say who the visitor is", async () => {
+    // Behind an untrusted proxy everyone would look the same, so one allowance each would be one for all.
+    for (let i = 0; i < 4; i++) {
+      const response = await fetch(`${harness.url}/api/spaces`, { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.1' } });
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it('stops making spaces once the server holds as many as it can', async () => {
+    await harness.stop();
+    harness = await startHarness({ hosted: true, maxSpaces: 2 });
+    await newSpace();
+    await newSpace();
+    const third = await fetch(`${harness.url}/api/spaces`, { method: 'POST' });
+    expect(third.status).toBe(503);
+    expect(await third.json()).toEqual({ error: 'full' });
+    expect(third.headers.get('set-cookie')).toBeNull();
   });
 
   it('limits what one space can keep', async () => {

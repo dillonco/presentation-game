@@ -120,9 +120,20 @@ export function StartSpace() {
   const statusId = useId();
   const action = useLockedAction(async () => {
     try {
+      // A browser presents one space at a time, so making another leaves the current one behind.
+      const me = (await (await fetch('/api/admin/me')).json().catch(() => ({}))) as { signedIn?: boolean };
+      if (
+        me.signedIn &&
+        !window.confirm(
+          "This browser already presents a space. Make a new one anyway? Copy the current space's presenter link first, or you can't get back into it.",
+        )
+      ) {
+        return;
+      }
       const response = await fetch('/api/spaces', { method: 'POST' });
       if (response.ok) window.location.assign('/admin');
       else if (response.status === 429) setStatus({ kind: 'error', text: 'Lots of people are starting at once. Try again in a minute.' });
+      else if (response.status === 503) setStatus({ kind: 'error', text: 'This server has as many spaces as it can hold. Try again another day.' });
       else setStatus({ kind: 'error', text: "Couldn't make your space. Try again." });
     } catch {
       setStatus({ kind: 'error', text: "Can't reach the server. Check your connection and try again." });
@@ -143,7 +154,14 @@ export function StartSpace() {
  */
 export function ClaimSpace({ presenterKey }: { presenterKey: string }) {
   const [status, setStatus] = useState<StatusContent>({ kind: 'empty' });
+  const [presenting, setPresenting] = useState(false);
   const statusId = useId();
+  useEffect(() => {
+    void fetch('/api/admin/me')
+      .then((response) => response.json() as Promise<{ signedIn?: boolean }>)
+      .then((me) => setPresenting(!!me.signedIn))
+      .catch(() => undefined);
+  }, []);
   const action = useLockedAction(async () => {
     try {
       const response = await fetch('/api/spaces/claim', {
@@ -167,6 +185,12 @@ export function ClaimSpace({ presenterKey }: { presenterKey: string }) {
             This opens a space's decks here. Only go on if the link is yours or from someone you present with: they
             can see everything added to it.
           </p>
+          {presenting ? (
+            <p className="notice-body">
+              This browser already presents a space, and will leave it. Copy that space's presenter link first if
+              you'll want it back.
+            </p>
+          ) : null}
         </div>
         <StatusArea id={statusId} content={status} />
         <ActionButton action={action} label="Open the space" busyLabel="Opening…" />

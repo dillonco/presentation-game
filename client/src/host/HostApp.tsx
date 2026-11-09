@@ -69,10 +69,19 @@ function useHostSession(room: string) {
         })
         .catch(() => undefined);
     });
-    socket.on('disconnect', () => setConnection((current) => (current === 'missing' ? current : 'offline')));
+    let ended = false;
+    socket.on('disconnect', (reason) => {
+      setConnection((current) => (current === 'missing' ? current : 'offline'));
+      // The server let go of this TV, for example after the presenter link was reset. Trying
+      // again either gets back in with this browser's newer session, or goes to sign-in.
+      if (reason === 'io server disconnect' && !ended) window.setTimeout(() => active && !ended && socket.connect(), 500);
+    });
     // The presenter deleted this game, maybe from another screen.
     socket.on('kicked', (reason: GoneReason) => {
-      if (reason === 'ended') setConnection('missing');
+      if (reason === 'ended') {
+        ended = true;
+        setConnection('missing');
+      }
     });
     socket.on('connect_error', (error) => {
       if (error.message === 'unauthorized') {

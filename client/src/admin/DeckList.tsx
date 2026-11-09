@@ -102,7 +102,13 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
         />
       </header>
 
-      {space ? <SpaceDetails code={space.code} presenterKey={space.presenterKey} /> : null}
+      {space ? (
+        <SpaceDetails
+          code={space.code}
+          presenterKey={space.presenterKey}
+          onReset={() => attempt(async () => setSpace(await api.resetPresenterLink()), "Couldn't reset the link. Try again.")}
+        />
+      ) : null}
 
       <div className="desk-actions">
         <Key
@@ -251,7 +257,7 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
 }
 
 /** A hosted space's join code and presenter link. */
-function SpaceDetails({ code, presenterKey }: { code: string; presenterKey: string }) {
+function SpaceDetails({ code, presenterKey, onReset }: { code: string; presenterKey: string; onReset: () => Promise<void> }) {
   const [copied, setCopied] = useState(false);
   // After the #, so the key never reaches the server's logs, a proxy, or another site's Referer.
   const link = `${window.location.origin}/p#${presenterKey}`;
@@ -274,6 +280,18 @@ function SpaceDetails({ code, presenterKey }: { code: string; presenterKey: stri
           onPress={async () => {
             await navigator.clipboard.writeText(link).catch(() => window.prompt('Copy your presenter link:', link));
             setCopied(true);
+          }}
+        />
+        <Key
+          label="Reset presenter link"
+          busyLabel="Resetting…"
+          onPress={async () => {
+            const sure = window.confirm(
+              'Make a new presenter link? The old one stops working, and every other device presenting this space is signed out. Copy the new link afterwards.',
+            );
+            if (!sure) return;
+            await onReset();
+            setCopied(false);
           }}
         />
       </div>

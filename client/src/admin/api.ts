@@ -74,6 +74,10 @@ export const api = {
   signOut: () => call('/api/admin/logout', { method: 'POST' }),
   space: () =>
     call<{ space: { code: string; presenterKey: string } | null }>('/api/admin/space').then((result) => result.space),
+  resetPresenterLink: () =>
+    call<{ space: { code: string; presenterKey: string } }>('/api/admin/space/reset', { method: 'POST' }).then(
+      (result) => result.space,
+    ),
 };
 
 /** What to say when a hosted space has reached one of its limits, or null for any other error. */

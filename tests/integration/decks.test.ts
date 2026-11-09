@@ -13,7 +13,7 @@ import {
 } from '../../shared/deck.js';
 import { cleanJpeg } from '../../server/media.js';
 import type { GuestView, HostView } from '../../shared/protocol.js';
-import { command, hostHello, newToken, nextEvent, send, startHarness, type Harness } from './helpers.js';
+import { command, hostHello, newToken, nextEvent, PASSWORD, send, startHarness, type Harness } from './helpers.js';
 import { phoneVideo, PICTURE } from '../fixtures/mp4.js';
 
 const WITH_GPS = readFileSync('tests/fixtures/gps.jpg');
@@ -130,6 +130,22 @@ describe('decks and photos', () => {
       expect(third.status).toBe(503);
       expect(await third.json()).toMatchObject({ error: 'too_many_games', problems: [expect.any(String)] });
       expect(harness.app.rooms.list()).toHaveLength(2);
+    });
+
+    it('signs in with a __Host- cookie over HTTPS', async () => {
+      const response = await fetch(`${harness.url}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+      const set = response.headers.get('set-cookie')!;
+      expect(set).toMatch(/^__Host-tp_admin=v3\./);
+      expect(set).toContain('; Secure');
+      expect(set).toContain('; Path=/');
+      expect(set).not.toContain('Domain');
+      const secure = set.split(';')[0]!;
+      const me = await fetch(`${harness.url}/api/admin/me`, { headers: { cookie: secure, 'x-forwarded-proto': 'https' } });
+      expect(await me.json()).toEqual({ signedIn: true });
     });
 
     it('refuses a forged cookie', async () => {
