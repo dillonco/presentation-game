@@ -475,7 +475,7 @@ textarea.field-input {
   inset: 0;
 }
 
-/* A numbered place on the trip tips map, matching its tip in the list. */
+/* A numbered place on the tips map, matching its tip in the list. */
 .tip-mark {
   display: inline-flex;
   align-items: center;

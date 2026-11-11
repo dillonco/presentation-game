@@ -42,7 +42,8 @@ async function addPhoto(media: MediaStore, space: string, file: string): Promise
 }
 
 /**
- * The sample words plus a few free-to-use photos, so a new presenter can try all four games.
+ * The sample words plus a few free-to-use photos, so all four games can be tried while developing.
+ * Only offered outside production: see `sampleDeck` in `server/app.ts`.
  * Each copy gets photos with fresh random ids, so nothing about a photo's address hints at the place,
  * and deleting one copy never takes photos from another.
  */

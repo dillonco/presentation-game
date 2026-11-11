@@ -6,7 +6,7 @@ import { copyText, TipsMap, tipsAsText } from '../ui/tips.js';
 
 const COPIED_MS = 2500;
 
-/** The trip tips to take home: every place opens in Maps, and one button copies the lot. */
+/** The tips to take home: every place opens in Maps, and one button copies the lot. */
 export function TipsScreen({ screen, title }: { screen: TipsScreenData; title: string }) {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null);
   const copy = useLockedAction(async () => {
@@ -69,7 +69,7 @@ export function TipsScreen({ screen, title }: { screen: TipsScreenData; title: s
             className="tips-copy-text"
             readOnly
             rows={5}
-            aria-label="Trip tips as text"
+            aria-label="Tips as text"
             value={tipsAsText(title, screen.tips)}
             ref={fallback}
           />

@@ -4,6 +4,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+# The sample deck is for development only, so its photos stay out of the image.
+RUN rm -rf dist/server/sample-photos
 RUN npm prune --omit=dev
 
 FROM node:22-alpine

@@ -33,6 +33,7 @@ function open(id: string): void {
 
 export function DeckList({ onSignOut }: { onSignOut: () => void }) {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
+  const [sampleOffered, setSampleOffered] = useState(false);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ deckId: string; items: string[] } | null>(null);
@@ -41,7 +42,9 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
 
   const refresh = useCallback(async () => {
     try {
-      setDecks(await api.decks());
+      const list = await api.decks();
+      setDecks(list.decks);
+      setSampleOffered(list.sampleDeck === true);
       setRooms(await api.rooms());
       setSpace(await api.space());
     } catch {
@@ -120,16 +123,18 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
           }
         />
         <Key label="Import a deck" onPress={() => picker.current?.click()} />
-        <Key
-          label="Add the sample deck"
-          busyLabel="Adding…"
-          onPress={() =>
-            attempt(async () => {
-              await api.addSampleDeck();
-              await refresh();
-            }, "Couldn't add the sample deck. Try again.")
-          }
-        />
+        {sampleOffered ? (
+          <Key
+            label="Add the sample deck"
+            busyLabel="Adding…"
+            onPress={() =>
+              attempt(async () => {
+                await api.addSampleDeck();
+                await refresh();
+              }, "Couldn't add the sample deck. Try again.")
+            }
+          />
+        ) : null}
         <input
           ref={picker}
           className="sr-only"
@@ -150,7 +155,11 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
 
       {decks && decks.length === 0 ? (
         <section className="desk-empty">
-          <p>No decks yet. Start a new one, or add the sample deck to try all four games first.</p>
+          <p>
+            {sampleOffered
+              ? 'No decks yet. Start a new one, or add the sample deck to try all four games first.'
+              : 'No decks yet. Start a new one, or import one you saved.'}
+          </p>
         </section>
       ) : null}
 

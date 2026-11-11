@@ -23,7 +23,7 @@ function mark(number: number, name: string): HTMLElement {
 }
 
 /**
- * Every place from the trip tips, numbered to match the list. Framed to fit them all, with no
+ * Every place from the tips, numbered to match the list. Framed to fit them all, with no
  * country outline, since a tip can be anywhere. Names stay in the list: beside the pins, nearby
  * places' names would overlap.
  */

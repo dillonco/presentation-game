@@ -34,8 +34,8 @@ One server holds every game in memory and talks to the TV and phones over Socket
 | `client/src/host/` | The TV. |
 | `client/src/guest/` | The phones. |
 | `client/src/admin/` | The deck builder. |
-| `client/src/map/` | The MapLibre maps for pins, reveals and trip tips. |
-| `client/src/theme/` | Styles, fonts, scenery and GIFs. |
+| `client/src/map/` | The MapLibre maps for pins, reveals and tips. |
+| `client/src/theme/` | Styles, fonts and GIFs. |
 
 Each screen's contents come from the server as a `HostScreen` or `GuestScreen` (see `shared/protocol.ts`). A new screen or game usually means a new kind there, the state that produces it in `room.ts`, and a view for the TV and for phones.
 

@@ -82,7 +82,7 @@ describe('looking up a short link', () => {
   });
 });
 
-describe('trip tips in a deck', () => {
+describe('tips in a deck', () => {
   it('loads decks made before tips existed', () => {
     expect(deckContentSchema.safeParse(deckWith(undefined)).success).toBe(true);
     expect(deckProblems(deckWith(undefined))).toEqual([]);
@@ -90,12 +90,12 @@ describe('trip tips in a deck', () => {
 
   it('needs a heading, and a tip or a place', () => {
     const deck = deckWith([tip(), tip({ heading: ' ', text: '', places: [] })]);
-    expect(deckProblems(deck)).toEqual(['Trip tip 2: add a heading, such as "Best bite".', 'Trip tip 2: add the tip, or a place.']);
+    expect(deckProblems(deck)).toEqual(['Tip 2: add a heading, such as "Best bite".', 'Tip 2: add the tip, or a place.']);
   });
 
   it('refuses a place whose link opens somewhere else', () => {
     const deck = deckWith([tip({ places: [{ ...NAMI, url: 'https://example.com' }] })]);
-    expect(deckProblems(deck)).toEqual(['Trip tip 1, place 1: use a Google Maps link.']);
+    expect(deckProblems(deck)).toEqual(['Tip 1, place 1: use a Google Maps link.']);
   });
 
   it("counts a tip's photo as the deck's, so deleting another deck keeps it", () => {

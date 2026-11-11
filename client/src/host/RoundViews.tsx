@@ -7,7 +7,6 @@ import type { Gif } from '../theme/gifs.js';
 import type { WordClip } from '../../../shared/youtube.js';
 import { TvPhoto } from '../ui/Photo.js';
 import { YouTubeClip, type ClipState } from '../ui/YouTubeClip.js';
-import { setClipPlaying } from './music.js';
 import { GifCard } from './GifCard.js';
 import { formatSeconds, Sunbar, useCountdown } from '../ui/Sunbar.js';
 
@@ -184,12 +183,8 @@ function WordClipCard({ clip, replay, muted }: { clip: WordClip; replay: number;
     left.current = 0;
     setPlay((count) => count + 1);
   }, [replay, firstReplay]);
-  // The music waits from the first play until the last one has finished.
-  useEffect(() => () => setClipPlaying(false), []);
   const onState = (next: ClipState) => {
     setState(next);
-    if (next === 'playing') setClipPlaying(true);
-    if (next === 'failed' || (next === 'stopped' && left.current <= 0)) setClipPlaying(false);
     if (next !== 'stopped' || left.current <= 0) return;
     left.current -= 1;
     gap.current = window.setTimeout(() => setPlay((count) => count + 1), CLIP_GAP_MS);

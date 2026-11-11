@@ -1,8 +1,8 @@
 # The Presentation Game
 
-**A live party game for showing friends your trip.** Put it on the TV, and your friends scan a QR code and play on their phones: guess the meaning of words you picked up, drop pins where your photos were taken, caption your best shots, and vote on each other's answers. The night ends on a podium and a page of tips for anyone going next.
+**A live party game for groups.** Put it on the TV, and everyone scans a QR code and plays on their phone: guess the meaning of words, drop pins where photos were taken, caption the best shots, answer questions and vote on each other's answers. Use it to present something, such as a trip, a hobby or a year in review, or just have fun with your own ideas. The night ends on a podium and an optional page of tips to take home.
 
-You build the night in a deck: your words, your photos, your country. Nobody needs an account or an app. [**Play it now**](https://f398c06c-874f-4c71-b978-f0df5600df35.apps.kiteware.com) on the hosted copy, or run your own on one small server.
+You build the night in a deck: your words, your photos, your questions. Nobody needs an account or an app, and it runs on one small server.
 
 ![A TV and a phone playing Define it](docs/media/hero.gif)
 
@@ -14,7 +14,7 @@ You build the night in a deck: your words, your photos, your country. Nobody nee
     <td><img src="docs/media/phone-define-write.png" alt="A phone writing a fake definition"></td>
   </tr>
   <tr>
-    <td colspan="2"><b>Define it.</b> A real word from the trip goes up. Everyone writes a fake meaning, then votes for the one they think is real. You score for finding it, and for every friend your fake fooled. Words can come with a clip of someone saying them.</td>
+    <td colspan="2"><b>Define it.</b> A real word goes up. Everyone writes a fake meaning, then votes for the one they think is real. You score for finding it, and for every friend your fake fooled. Words can come with a clip of someone saying them.</td>
   </tr>
   <tr>
     <td><img src="docs/media/map-reveal.gif" alt="Guests' pins appearing on a map of Japan, with distances"></td>
@@ -43,18 +43,14 @@ Each photo can bring up to 5 more from the same moment, pinned up on the TV afte
 
 ### The finale
 
-The podium lands one place at a time, and each phone learns its place only when the TV shows it. Then an optional page of trip tips goes up on the TV and on every phone, with each place a tap away in Maps.
+The podium lands one place at a time, and each phone learns its place only when the TV shows it. Then an optional page of tips goes up on the TV and on every phone, with each place a tap away in Maps.
 
 <table>
   <tr>
     <td width="50%"><img src="docs/media/podium.gif" alt="The final podium landing with confetti"></td>
-    <td width="50%"><img src="docs/media/tips.gif" alt="Trip tips beside a map with numbered pins"></td>
+    <td width="50%"><img src="docs/media/tips.gif" alt="Tips beside a map with numbered pins"></td>
   </tr>
 </table>
-
-## Play it now
-
-Open **[the hosted copy](https://f398c06c-874f-4c71-b978-f0df5600df35.apps.kiteware.com)**, press **Make my space**, then **Add the sample deck** and **Start game**. Put that page on the TV, and friends join by scanning the QR code or typing the 6-letter code on the home page. No account, no install.
 
 ## Run it yourself in two minutes
 
@@ -69,6 +65,16 @@ npm run dev
 ```
 
 `npm run setup` makes a `.env` file with a presenter password and prints the password. Open http://localhost:5173/admin, sign in with it, and press **Add the sample deck**. It has all four games, with free-to-use photos from Japan. Press **Start game**, then open the join link in another window, or a few, to play along.
+
+Or let sample players fill the room. Leave the lobby on the TV page, and in another terminal run this with the link from that page's address bar:
+
+```bash
+npm run players -- http://localhost:5173/host/<room> --count 4
+```
+
+They write, vote, drop pins and pick answers like guests' phones would, while you press `Space` on the TV.
+
+The sample deck and sample players are for trying the game while you develop. A server running with `NODE_ENV=production`, as the Docker image does, has no sample deck: every deck on it is one somebody made.
 
 ## Play it on the night
 
@@ -150,11 +156,9 @@ Guests can lock their phones, lose signal or refresh, and they come straight bac
 
 ## The look
 
-The TV is set in photos from the trip, shipped with the app: the city at evening in the lobby, a different daytime scene on each game's title card, a bridge at night during rounds, neon streets for the standings and a lantern-lit shrine for the podium. They drift slowly and are darkened where the words go. If one can't load, a painted sky in the same mood shows instead. Anyone set to reduce motion gets a still version.
+The TV has no background pictures. Behind everything is a sky drawn from colours, in [`client/src/host/Scene.tsx`](client/src/host/Scene.tsx) and [`client/src/theme/scene.css`](client/src/theme/scene.css), with a different time of day for each part of the night: dusk in the lobby, daytime on each game's title card, night during rounds, sunset for the standings and a lantern-lit night for the podium. Clouds part between games. Anyone set to reduce motion gets a still version. A deck's accent colour tints the rest. The screenshots here were taken with photo backgrounds, which the game no longer has.
 
-Make it yours: put your own photos in [`client/src/theme/scenery/`](client/src/theme/scenery/) and list them in [`client/src/theme/scenery.ts`](client/src/theme/scenery.ts). Strip their location data first.
-
-The TV also plays background music quietly all night, from a YouTube video: by default "Miracle Shopping", the Don Quijote store song, from its writer Maimi Tanaka's channel. It starts at the presenter's first key press, waits while a word clip plays, and `M` mutes it. Change the video, or set it to `''` for none, with `MUSIC_VIDEO` in [`client/src/host/music.ts`](client/src/host/music.ts). Each title card and standings screen also pins up a GIF from Giphy, set in [`client/src/theme/gifs.ts`](client/src/theme/gifs.ts). The TV needs internet for the music, GIFs and word clips. Anything that can't load is left out.
+There is no background music: the TV makes its own beeps and chimes, and plays a word's clip when it has one. Each title card and standings screen pins up a GIF from Giphy, set in [`client/src/theme/gifs.ts`](client/src/theme/gifs.ts). The TV needs internet for the GIFs and word clips. Anything that can't load is left out.
 
 ## Development
 
@@ -176,8 +180,8 @@ The server is [Fastify](https://fastify.dev) and [Socket.IO](https://socket.io),
 - Maps: [OpenFreeMap](https://openfreemap.org), with data from [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, drawn with [MapLibre](https://maplibre.org). Country outlines from [Natural Earth](https://www.naturalearthdata.com).
 - Sample photos: Wikimedia Commons, all CC0. See [`server/sample-photos/CREDITS.md`](server/sample-photos/CREDITS.md).
 - Fonts: Zen Kaku Gothic New, Zen Old Mincho, DotGothic16 and DSEG7, all under the SIL Open Font License. See [`client/src/theme/fonts/LICENSES.md`](client/src/theme/fonts/LICENSES.md).
-- Scenery: the maintainer's own trip photos. Music and word clips play from YouTube, and GIFs from Giphy; none are included in this repository.
+- Word clips play from YouTube, and GIFs from Giphy; neither is included in this repository.
 
 ## License
 
-[MIT](LICENSE). The license covers this repository's code. The sample photos, fonts and scenery photos keep their own terms.
+[MIT](LICENSE). The license covers this repository's code. The sample photos and fonts keep their own terms.

@@ -1,15 +1,15 @@
 # Building a deck
 
-Everything about one night lives in a deck: its title, the country for the map, the games and their content. Another trip needs a new deck, not new code.
+Everything about one night lives in a deck: its title, the country for the map, the games and their content. Another night or topic needs a new deck, not new code.
 
-Sign in at `/admin`, press **New deck** (or **Add the sample deck** to try one first), and fill it in. Changes save as you type. When it's ready, press **Start game**: the page turns into the TV screen, with a QR code for guests to join. Make it full screen on the TV.
+Sign in at `/admin`, press **New deck**, and fill it in. (A development server also has **Add the sample deck**, to try one first.) Changes save as you type. When it's ready, press **Start game**: the page turns into the TV screen, with a QR code for guests to join. Make it full screen on the TV.
 
 > The builder shows the real answers, so keep it off the TV.
 
 ## The deck
 
 - **Title** is shown in the lobby and on the podium.
-- **Country for the map** is where Where was this? guests drop their pins, and frames the trip tips map. Any country works.
+- **Country for the map** is where Where was this? guests drop their pins, and frames the tips map. Any country works.
 - **Colour and moderation** sets the accent colour, words guests can't use in answers, and how close two answers can be before the second is refused.
 - A deck is an ordered list of up to 12 games. Each can be moved, repeated or removed.
 - **Export** saves a deck as a JSON file. The file names its photos but doesn't contain them, so an imported deck only finds its photos on the same server.
@@ -44,14 +44,14 @@ In Define it and Caption this, the TV shows each answer on its own once writing 
 
 Each photo in Caption this, Where was this? and Pick one can have up to 5 more photos. Once that photo's result is shown, the TV pins them up as a collage, so you can tell the story behind it, and phones say to look up. Click a photo to fill the screen, use the arrow keys to step through, and press Escape to go back. `Space` moves on as usual.
 
-## The podium and trip tips
+## The podium and tips
 
 The night ends on a podium. Places below it fade in, then 3rd, 2nd and 1st land in turn. Ties share a place, and each phone shows its guest's place only once it's on the TV.
 
-**Trip tips** are an optional last page: a heading and a line for each tip, such as "Best bite", with an optional photo and up to 3 places. Paste a Google Maps link to add a place. The server follows short links only to Google Maps and reads the place's name and spot from the address. The TV shows the tips beside a map with numbered pins. Each phone gets the same page, where each place opens in Maps and **Copy all** copies everything as plain text. On the podium, `Space` moves on to the tips.
+**Tips** are an optional last page: a heading and a line for each tip, such as "Best bite", with an optional photo and up to 3 places. Paste a Google Maps link to add a place. The server follows short links only to Google Maps and reads the place's name and spot from the address. The TV shows the tips beside a map with numbered pins. Each phone gets the same page, where each place opens in Maps and **Copy all** copies everything as plain text. On the podium, `Space` moves on to the tips.
 
 ## Photos
 
 Photos are resized in the browser and lose their metadata before upload. The server rebuilds each one again to be sure, and rejects anything that isn't a complete JPEG. iPhone HEIC files are converted first. Any photo can be a video instead, as an MP4 or MOV of up to 100 MB.
 
-The sample deck's photos are free to use (see [`server/sample-photos/CREDITS.md`](../server/sample-photos/CREDITS.md)), and each copy of the sample gets its own.
+The sample deck, on a development server, has photos that are free to use (see [`server/sample-photos/CREDITS.md`](../server/sample-photos/CREDITS.md)), and each copy of the sample gets its own.

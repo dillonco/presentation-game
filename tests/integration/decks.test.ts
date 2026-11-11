@@ -647,6 +647,20 @@ describe('decks and photos', () => {
     });
   });
 
+  describe('a live server', () => {
+    it('leaves the sample deck out, and tells the builder so', async () => {
+      await harness.stop();
+      harness = await startHarness({ sampleDeck: false });
+      cookie = await harness.signIn();
+      expect((await api('/api/admin/decks/sample', 'POST')).status).toBe(404);
+      expect(await (await api('/api/admin/decks')).json()).toEqual({ decks: [], sampleDeck: false });
+    });
+
+    it('offers it everywhere else', async () => {
+      expect(await (await api('/api/admin/decks')).json()).toEqual({ decks: [], sampleDeck: true });
+    });
+  });
+
   describe('starting a game from a deck', () => {
     async function start(content: DeckContent) {
       const deck = await create(content);

@@ -80,7 +80,7 @@ export interface StandingRow {
   previous: number;
 }
 
-/** One of the trip tips that close the night. Nothing secret, so the TV and phones get the same. */
+/** One of the tips that close the night. Nothing secret, so the TV and phones get the same. */
 export interface TipView {
   heading: string;
   text: string;

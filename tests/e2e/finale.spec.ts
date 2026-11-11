@@ -24,7 +24,7 @@ async function blankStreets(context: BrowserContext): Promise<void> {
 
 /** One map round is the quickest way to give everyone a different score. */
 async function startMapGame(browser: Browser): Promise<{ tv: Page; room: string; context: BrowserContext }> {
-  // The shared helper also keeps the TV's GIFs and background music off the internet.
+  // The shared helper also keeps the TV's GIFs and word clips off the internet.
   const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
   await blankStreets(context);
   // Lets each test hear what the TV played, without speakers.

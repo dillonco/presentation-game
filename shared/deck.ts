@@ -7,7 +7,7 @@ import { MAX_CLIP_SECONDS, MAX_CLIP_TIME, parseYouTubeLink, type WordClip } from
 
 /**
  * A deck is everything specific to one night: words, photos, timers and rules.
- * A new trip or topic needs a new deck, not new code.
+ * A new night or topic needs a new deck, not new code.
  *
  * Drafts are allowed to be unfinished, so the builder can save as you type.
  * `deckProblems` decides whether one is ready to play.
@@ -41,7 +41,7 @@ export const MAX_EXTRA_PHOTOS = 5;
 export const MAX_GAMES = 12;
 export const MAX_BLOCKED_WORDS = 200;
 export const MAX_BLOCKED_WORD = 40;
-/** Trip tips: the page after the podium, with what you'd tell a friend going next. */
+/** Tips: the page after the podium, with what you'd tell a friend to try next. */
 export const MAX_TIPS = 10;
 export const MAX_TIP_HEADING = 40;
 export const MAX_TIP_TEXT = 200;
@@ -165,7 +165,7 @@ export const deckContentSchema = z.strictObject({
     showLeftPage: z.boolean(),
   }),
   games: z.array(z.discriminatedUnion('type', [defineGame, geoGame, captionGame, choiceGame])).max(MAX_GAMES),
-  /** Left out by decks made before trip tips existed. Empty, the night ends on the podium. */
+  /** Left out by decks made before tips existed. Empty, the night ends on the podium. */
   tips: z.array(tip).max(MAX_TIPS).optional(),
 });
 
@@ -256,7 +256,7 @@ export function emptyDeck(): DeckContent {
   };
 }
 
-/** Real words, so a new presenter can try a round before writing their own. */
+/** Real words, for the sample deck and for a game started without a deck. */
 export const SAMPLE_WORDS = [
   { word: 'komorebi', definition: 'Sunlight filtering through the leaves of trees' },
   { word: 'tsundoku', definition: 'Buying books and letting them pile up unread' },
@@ -316,7 +316,7 @@ export function deckProblems(content: DeckContent): string[] {
   if (!country) problems.push('Choose a country for the map.');
 
   (content.tips ?? []).forEach((tip, index) => {
-    const where = `Trip tip ${index + 1}`;
+    const where = `Tip ${index + 1}`;
     const heading = cleanName(tip.heading);
     if (!heading) problems.push(`${where}: add a heading, such as "Best bite".`);
     if (Array.from(heading).length > MAX_TIP_HEADING) {

@@ -48,6 +48,11 @@ export interface AppOptions {
    */
   hosted?: boolean;
   limits?: SpaceLimits;
+  /**
+   * Offers the sample deck, for trying a whole game while developing. Off in production
+   * (NODE_ENV=production, as the Docker image sets), where decks are only ever the presenter's own.
+   */
+  sampleDeck?: boolean;
 }
 
 /** What each hosted space may keep. */
@@ -345,6 +350,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
       limits: options.limits ?? (hosted ? HOSTED_LIMITS : undefined),
       fallbackSetup: options.defaultSetup ?? STARTER_SETUP,
       maxVideoUploads: options.maxVideoUploads,
+      sampleDeck: options.sampleDeck ?? process.env.NODE_ENV !== 'production',
       onError: (error, message) => fastify.log.error(error, message),
     }),
   );

@@ -178,7 +178,7 @@ type Step =
   | { kind: 'gallery'; info: RoundInfo; images: string[]; place: string | null }
   | { kind: 'standings'; gameNumber: number; game: GameType }
   | { kind: 'final' }
-  /** Trip tips after the podium. Only when the deck has some. */
+  /** Tips after the podium. Only when the deck has some. */
   | { kind: 'tips' };
 
 /** Lays the night out as one straight line of steps, so moving on is always just the next one. */

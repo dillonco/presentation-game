@@ -59,6 +59,8 @@ export interface DeckRouteOptions {
   lookUp?: typeof fetch;
   /** How many videos may be arriving at once. */
   maxVideoUploads?: number;
+  /** Whether the sample deck can be added. Only a development server offers it. */
+  sampleDeck: boolean;
 }
 
 function deckIdFrom(params: unknown): string | null {
@@ -68,7 +70,7 @@ function deckIdFrom(params: unknown): string | null {
 
 /** Everything in here shows real answers, so it all needs a signed-in presenter, and only reaches their own space. */
 export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
-  const { auth, decks, media, rooms, sessions, spaces, limits, fallbackSetup, onError, lookUp = fetch, maxVideoUploads = 4 } = options;
+  const { auth, decks, media, rooms, sessions, spaces, limits, fallbackSetup, onError, lookUp = fetch, maxVideoUploads = 4, sampleDeck } = options;
 
   /** Photos named in a deck that aren't this space's own. */
   const foreignPhotos = async (space: string, content: DeckContent): Promise<number> => {
@@ -171,7 +173,7 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
         })),
     }));
 
-    scope.get('/api/admin/decks', async (request) => ({ decks: await decks.summaries(spaceOf(request)) }));
+    scope.get('/api/admin/decks', async (request) => ({ decks: await decks.summaries(spaceOf(request)), sampleDeck }));
 
     const createDeck = async (space: string, content: DeckContent, reply: FastifyReply) => {
       const deck = await decks.create(space, content, limits?.decks);
@@ -186,19 +188,21 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
       return (await refuseDeck(space, content.data, reply)) ?? createDeck(space, content.data, reply);
     });
 
-    scope.post('/api/admin/decks/sample', async (request, reply) => {
-      const space = spaceOf(request);
-      const release = reserve(space, SAMPLE_PHOTO_COUNT);
-      try {
-        if (limits && (await media.countOwned(space)) + release.othersPending + SAMPLE_PHOTO_COUNT > limits.media) {
-          return reply.code(409).send({ error: 'too_many_photos' });
+    if (sampleDeck) {
+      scope.post('/api/admin/decks/sample', async (request, reply) => {
+        const space = spaceOf(request);
+        const release = reserve(space, SAMPLE_PHOTO_COUNT);
+        try {
+          if (limits && (await media.countOwned(space)) + release.othersPending + SAMPLE_PHOTO_COUNT > limits.media) {
+            return reply.code(409).send({ error: 'too_many_photos' });
+          }
+          if (limits && (await decks.count(space)) >= limits.decks) return reply.code(409).send({ error: 'too_many_decks' });
+          return createDeck(space, await sampleDeckWithPhotos(media, space), reply);
+        } finally {
+          release();
         }
-        if (limits && (await decks.count(space)) >= limits.decks) return reply.code(409).send({ error: 'too_many_decks' });
-        return createDeck(space, await sampleDeckWithPhotos(media, space), reply);
-      } finally {
-        release();
-      }
-    });
+      });
+    }
 
     scope.get('/api/admin/decks/:id', async (request, reply) => {
       const id = deckIdFrom(request.params);
@@ -276,7 +280,7 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
       return { ok: true };
     });
 
-    // A pasted Google Maps link, turned into a named spot for the trip tips map.
+    // A pasted Google Maps link, turned into a named spot for the tips map.
     scope.post('/api/admin/places', async (request, reply) => {
       const body = placeSchema.safeParse(request.body);
       if (!body.success) return reply.code(400).send({ error: 'not_a_map_link' });

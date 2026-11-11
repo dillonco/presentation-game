@@ -18,7 +18,7 @@ export async function newContext(browser: Browser, options: Parameters<Browser['
   await context.route(/^https:\/\/([a-z0-9-]+\.)?giphy\.com\//, (route) =>
     route.fulfill({ contentType: 'image/gif', body: BLANK_GIF }),
   );
-  // The background music's player stays empty, so the music never starts.
+  // YouTube's player stays empty, so a word clip never reaches the internet.
   await context.route(/^https:\/\/www\.youtube(-nocookie)?\.com\/(iframe_api|embed\/)/, (route) =>
     route.fulfill({ contentType: route.request().url().includes('iframe_api') ? 'text/javascript' : 'text/html', body: '' }),
   );

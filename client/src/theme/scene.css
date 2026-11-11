@@ -126,39 +126,6 @@
 .scene-glow { background: var(--glow); }
 .scene-veil { background: var(--veil); }
 
-/* A film still over the painted sky, darkened where the words go */
-.scene-photo {
-  position: absolute;
-  inset: -2%;
-  background-position: center;
-  background-size: cover;
-  opacity: 0;
-  transition: opacity 1.2s ease-in-out;
-}
-
-.scene-photo.shown {
-  opacity: 1;
-  animation: photo-drift 60s ease-in-out infinite alternate;
-}
-
-.scene-photo::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--photo-veil);
-}
-
-@keyframes photo-drift {
-  from { transform: scale(1) translate(0, 0); }
-  to { transform: scale(1.08) translate(-1.5%, -1%); }
-}
-
-.mood-dusk { --photo-veil: linear-gradient(180deg, rgba(10, 12, 30, 0.55) 0%, rgba(10, 12, 30, 0.2) 45%, rgba(10, 12, 30, 0.4) 100%); }
-.mood-day { --photo-veil: linear-gradient(90deg, rgba(8, 14, 28, 0.7) 0%, rgba(8, 14, 28, 0.42) 40%, rgba(8, 14, 28, 0) 70%); }
-.mood-night { --photo-veil: linear-gradient(180deg, rgba(4, 8, 16, 0.35) 0%, rgba(4, 8, 16, 0.15) 50%, rgba(4, 8, 16, 0.3) 100%); }
-.mood-sunset { --photo-veil: linear-gradient(180deg, rgba(14, 10, 30, 0.6) 0%, rgba(14, 10, 30, 0.2) 50%, rgba(14, 10, 30, 0.4) 100%); }
-.mood-lanterns { --photo-veil: linear-gradient(180deg, rgba(4, 6, 14, 0.65) 0%, rgba(4, 6, 14, 0.35) 55%, rgba(4, 6, 14, 0.5) 100%); }
-
 /* Stars */
 .scene-stars {
   position: absolute;

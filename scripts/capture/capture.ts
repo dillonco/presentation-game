@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   try {
     await waitForServer();
 
-    // The presenter signs in, adds the sample deck, and gives it trip tips.
+    // The presenter signs in, adds the sample deck, and gives it tips.
     const admin = await context(browser, { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
     const builder = await admin.newPage();
     await builder.goto('/admin');
@@ -359,7 +359,7 @@ async function main(): Promise<void> {
     }
     await advanceTo(tv, 'Standings');
 
-    // The podium, then the trip tips.
+    // The podium, then the tips.
     await advanceTo(tv, 'Final standings');
     mark('podium');
     await pause(tv, 9000);

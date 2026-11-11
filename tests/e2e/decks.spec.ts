@@ -369,7 +369,7 @@ test.describe('managing decks', () => {
   test('the sample deck is one press away, with all four games', async ({ browser }) => {
     const page = await signIn(browser);
     await page.context().route('**/api/admin/decks', (route) => {
-      if (route.request().method() === 'GET') return route.fulfill({ json: { decks: [] } });
+      if (route.request().method() === 'GET') return route.fulfill({ json: { decks: [], sampleDeck: true } });
       return route.continue();
     }, { times: 1 });
     await page.reload();

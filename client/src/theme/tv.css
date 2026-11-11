@@ -1481,7 +1481,7 @@ button.entry:focus-visible {
  */
 .tv {
   --text-box: rgba(10, 12, 28, 0.5);
-  /* Blur is redrawn every frame while the scenery drifts, so keep it modest for TV hardware. */
+  /* Blur is redrawn every frame while the sky drifts, so keep it modest for TV hardware. */
   --text-box-blur: blur(0.6rem);
   --text-box-radius: 12px;
   --text-box-gap: 1.5rem;
@@ -1724,7 +1724,7 @@ button.entry:focus-visible {
   .gallery-lightbox { animation: none; }
 }
 
-/* Trip tips: the last page, what you'd tell a friend going next, beside a map of the places */
+/* Tips: the last page, what you'd tell a friend to try next, beside a map of the places */
 .tips-head {
   padding-bottom: 1.5rem;
   border-bottom: 0;
@@ -1874,22 +1874,4 @@ button.entry:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .tip-card,
   .tips-map { animation: none; }
-}
-
-/* The background music's player: there for its sound only. */
-.tv-music {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  width: 24rem;
-  aspect-ratio: 16 / 9;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.tv-music iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
 }

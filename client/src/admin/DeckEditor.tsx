@@ -332,7 +332,7 @@ function Editor({ loaded }: { loaded: StoredDeck }) {
 
       <section className="desk-section" aria-labelledby="deck-tips">
         <h2 className="desk-section-title" id="deck-tips">
-          Trip tips
+          Tips
         </h2>
         <TipsEditor
           tips={content.tips ?? []}

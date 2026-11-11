@@ -3,7 +3,6 @@
  * sine carriers bent by a sine modulator, so nothing is downloaded. Phones stay silent.
  */
 import { safeStorage } from '../net/socket.js';
-import { setMusicMuted, startMusic } from './music.js';
 
 export type Cue = 'join' | 'chime' | 'tick' | 'timeUp' | 'real' | 'listIn' | 'place3' | 'place2' | 'place1';
 
@@ -133,8 +132,6 @@ let unlocked = false;
 /** Browsers keep audio off until someone presses a key or clicks, which the presenter does to start. */
 export function unlockSound(): void {
   unlocked = true;
-  setMusicMuted(muted);
-  startMusic();
   const ctx = audio();
   if (!ctx) return;
   if (ctx.state !== 'running') void ctx.resume().catch(() => undefined);
@@ -147,7 +144,6 @@ export function isMuted(): boolean {
 export function setMuted(value: boolean): void {
   muted = value;
   safeStorage.set(MUTED_KEY, value ? '1' : '0');
-  setMusicMuted(value);
 }
 
 /** Plays now, or not at all: a sound that arrives late is worse than none. */

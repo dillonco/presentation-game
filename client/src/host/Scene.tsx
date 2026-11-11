@@ -1,10 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { HostScreen } from '../../../shared/protocol.js';
-import { allSceneryUrls } from '../theme/scenery.js';
 import '../theme/scene.css';
 
 /**
- * A hand-painted sky behind the TV, in the spirit of a hand-drawn animated film: drifting
+ * A painted sky behind the TV, drawn here from colours and shapes with no pictures: drifting
  * cumulus, rolling hills, wind in the grass. Each part of the night has its own time of day,
  * and the in-between screens open with the clouds parting.
  */
@@ -243,37 +242,7 @@ function Land({ setup }: { setup: MoodSetup }) {
   );
 }
 
-/** A photo over the painted sky, drifting slowly. It only appears once it has loaded. */
-function ScenePhoto({ url }: { url: string }) {
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    let active = true;
-    const image = new Image();
-    image.referrerPolicy = 'no-referrer';
-    image.onload = () => active && setLoaded(true);
-    image.src = url;
-    if (image.complete && image.naturalWidth > 0) setLoaded(true);
-    return () => {
-      active = false;
-    };
-  }, [url]);
-  return (
-    <div
-      className={loaded ? 'scene-photo shown' : 'scene-photo'}
-      style={loaded ? { backgroundImage: `url("${url}")` } : undefined}
-    />
-  );
-}
-
-const SceneLayer = memo(function SceneLayer({
-  mood,
-  photo,
-  entering,
-}: {
-  mood: Mood;
-  photo: string | null;
-  entering: boolean;
-}) {
+const SceneLayer = memo(function SceneLayer({ mood, entering }: { mood: Mood; entering: boolean }) {
   const setup = SETUP[mood];
   const pieces = useMemo(() => {
     const rand = seeded(mood.length * 97 + setup.clouds * 13);
@@ -345,7 +314,6 @@ const SceneLayer = memo(function SceneLayer({
           </div>
         ))}
       </div>
-      {photo ? <ScenePhoto url={photo} /> : null}
       {setup.particle ? (
         <div className={`scene-particles ${setup.particle}`}>
           {pieces.particles.map((style, i) => (
@@ -395,46 +363,26 @@ function prefersStillness(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
-/** Fetches every still once the TV has settled, so each screen change shows its picture at once. */
-function usePreloadedScenery(): void {
-  useEffect(() => {
-    const images: HTMLImageElement[] = [];
-    const timer = window.setTimeout(() => {
-      for (const url of allSceneryUrls()) {
-        const image = new Image();
-        image.referrerPolicy = 'no-referrer';
-        image.src = url;
-        images.push(image);
-      }
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, []);
-}
-
-export function Scene({ mood, photo = null }: { mood: Mood; photo?: string | null }) {
-  usePreloadedScenery();
+export function Scene({ mood }: { mood: Mood }) {
   const nextKey = useRef(1);
-  const shown = useRef(`${mood}|${photo}`);
-  const [layers, setLayers] = useState<{ mood: Mood; photo: string | null; key: number }[]>([
-    { mood, photo, key: 0 },
-  ]);
+  const shown = useRef(mood);
+  const [layers, setLayers] = useState<{ mood: Mood; key: number }[]>([{ mood, key: 0 }]);
   const [part, setPart] = useState<{ mood: Mood; key: number } | null>(null);
 
   useEffect(() => {
-    const id = `${mood}|${photo}`;
-    if (shown.current === id) return;
-    shown.current = id;
+    if (shown.current === mood) return;
+    shown.current = mood;
     const key = nextKey.current;
     nextKey.current += 1;
     // The new sky fades in over the old one, which goes once it's covered.
-    setLayers((current) => [...current.slice(-1), { mood, photo, key }]);
+    setLayers((current) => [...current.slice(-1), { mood, key }]);
     setPart(PARTS_CLOUDS.has(mood) && !prefersStillness() ? { mood, key } : null);
     const timer = window.setTimeout(() => {
       setLayers((current) => current.slice(-1));
       setPart(null);
     }, FADE_MS + 400);
     return () => window.clearTimeout(timer);
-  }, [mood, photo]);
+  }, [mood]);
 
   return (
     <>
@@ -450,7 +398,7 @@ export function Scene({ mood, photo = null }: { mood: Mood; photo?: string | nul
       </svg>
       <div className="scene" aria-hidden="true">
         {layers.map((layer, index) => (
-          <SceneLayer key={layer.key} mood={layer.mood} photo={layer.photo} entering={index > 0} />
+          <SceneLayer key={layer.key} mood={layer.mood} entering={index > 0} />
         ))}
       </div>
       {part ? <CloudPart key={part.key} mood={part.mood} /> : null}

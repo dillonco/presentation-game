@@ -12,7 +12,6 @@ import { keepClockSynced } from '../net/clock.js';
 import { openSocket, reconnectWithNetwork } from '../net/socket.js';
 import { GAME_NAMES, GAME_NUMERALS, GAME_RULES } from '../theme/games.js';
 import { gifFor, STANDINGS_GIFS, TITLE_GIFS } from '../theme/gifs.js';
-import { sceneryFor } from '../theme/scenery.js';
 import '../theme/components.css';
 import '../theme/tv.css';
 import { useAccent } from '../ui/accent.js';
@@ -285,7 +284,7 @@ function RejoinCard({ joinUrl, onClose }: { joinUrl: string; onClose: () => void
 
 /**
  * Space shows the whole podium at once while it's still landing. Once it's up, Space moves on to
- * the trip tips, when the deck has some.
+ * the tips, when the deck has some.
  */
 function PodiumSkip({
   screen,
@@ -310,7 +309,7 @@ function PodiumSkip({
   if (!landing) {
     return next ? (
       <button type="button" className="tv-key" onClick={onSkip}>
-        Trip tips <kbd>Space</kbd>
+        Tips <kbd>Space</kbd>
       </button>
     ) : null;
   }
@@ -507,7 +506,7 @@ export default function HostApp({ room }: { room: string }) {
   if (connection === 'missing') {
     return (
       <main className="tv" data-mood="night">
-        <Scene mood="night" photo={sceneryFor('night')} />
+        <Scene mood="night" />
         <section className="title-card">
           <h1 className="title-name">This game isn't running</h1>
           <p className="title-rule">Start a new game from the admin page.</p>
@@ -519,7 +518,7 @@ export default function HostApp({ room }: { room: string }) {
   if (!view) {
     return (
       <main className="tv" data-mood="night">
-        <Scene mood="night" photo={sceneryFor('night')} />
+        <Scene mood="night" />
         <section className="title-card">
           <p className="title-rule">Connecting…</p>
         </section>
@@ -528,10 +527,9 @@ export default function HostApp({ room }: { room: string }) {
   }
 
   const mood = moodFor(view.screen.kind);
-  const gameNumber = 'gameNumber' in view.screen ? view.screen.gameNumber : 1;
   return (
     <main className="tv" data-mood={mood} data-screen={view.screen.kind}>
-      <Scene mood={mood} photo={sceneryFor(mood, gameNumber)} />
+      <Scene mood={mood} />
       {view.screen.kind === 'lobby' ? <Lobby view={view} joinUrl={joinUrl} /> : null}
       {view.screen.kind === 'title' ? <TitleCard view={view} /> : null}
       {view.screen.kind === 'write' ? (

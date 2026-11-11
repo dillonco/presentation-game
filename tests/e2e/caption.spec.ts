@@ -27,7 +27,7 @@ async function startCaptionGame(
   browser: Browser,
   settings: Record<string, number> = {},
 ): Promise<{ tv: Page; room: string; image: string }> {
-  // The shared helper also keeps the TV's GIFs and background music off the internet.
+  // The shared helper also keeps the TV's GIFs and word clips off the internet.
   const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
   const tv = await context.newPage();
   failOnPageErrors(tv);
