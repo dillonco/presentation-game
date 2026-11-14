@@ -10,6 +10,15 @@ function isShortLink(url: URL): boolean {
   return url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl';
 }
 
+/** A name from the address, left as it is when its escapes are broken, since the spot is what matters. */
+function decodeName(encoded: string): string {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
 /**
  * Reads the place's name and spot from a full Google Maps address. The pin's own spot (`!3d…!4d…`)
  * wins over the camera's (`@lat,lng`), which is often zoomed out far from it.
@@ -23,7 +32,7 @@ export function placeFromMapUrl(value: string): Omit<TipPlace, 'url'> | null {
   }
   const path = url.pathname;
   const named = /\/maps\/place\/([^/]+)/.exec(path);
-  const rawName = named ? decodeURIComponent(named[1]!.replaceAll('+', ' ')) : (url.searchParams.get('q') ?? '');
+  const rawName = named ? decodeName(named[1]!.replaceAll('+', ' ')) : (url.searchParams.get('q') ?? '');
 
   const number = String.raw`(-?\d{1,3}(?:\.\d+)?)`;
   const pins = [...value.matchAll(new RegExp(String.raw`!3d${number}!4d${number}`, 'g'))];

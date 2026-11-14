@@ -5,6 +5,10 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { assertSafeKey, assertSafePrefix, type Storage, type StoredObject } from './types.js';
 
 export interface S3Config {
@@ -56,6 +60,21 @@ export class S3Storage implements Storage {
       if ((error as { name?: string }).name === 'NoSuchKey') return null;
       throw error;
     }
+  }
+
+  async download(key: string, path: string): Promise<number | null> {
+    assertSafeKey(key);
+    let body: Readable;
+    try {
+      const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      if (!result.Body) return null;
+      body = result.Body as Readable;
+    } catch (error) {
+      if ((error as { name?: string }).name === 'NoSuchKey') return null;
+      throw error;
+    }
+    await pipeline(body, createWriteStream(path));
+    return (await stat(path)).size;
   }
 
   async delete(key: string): Promise<void> {

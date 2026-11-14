@@ -232,14 +232,41 @@ describe('new-phone rejoin', () => {
     expect(room.join('new', 'Alex', 4).kind).toBe('pending');
   });
 
-  it('allows one request per player, and a few in total', () => {
+  it('lets a newer request for a player replace the older one', () => {
+    const room = makeRoom();
+    const id = joinOnline(room, 'old', 'Alex');
+    room.disconnect(id, 2);
+    expect(room.join('stranger', 'Alex', 3)).toEqual({ kind: 'pending', created: true });
+    expect(room.join('real', 'Alex', 4)).toEqual({
+      kind: 'pending',
+      created: true,
+      closed: [{ tokenHash: 'stranger', result: 'expired' }],
+    });
+    expect(room.hostView().rejoinRequests).toHaveLength(1);
+    expect(room.lookupToken('real')).toEqual({ kind: 'pending' });
+    expect(room.lookupToken('stranger')).toEqual({ kind: 'unknown' });
+  });
+
+  it('keeps a few requests at most, letting the oldest go', () => {
+    const room = makeRoom();
+    const ids = ['A', 'B', 'C', 'D', 'E', 'F'].map((name) => joinOnline(room, `o${name}`, name));
+    ids.forEach((id) => room.disconnect(id, 2));
+    ['A', 'B', 'C', 'D', 'E'].forEach((name) => room.join(`x${name}`, name, 3));
+    expect(room.join('xF', 'F', 3 + 10_000)).toEqual({
+      kind: 'pending',
+      created: true,
+      closed: [{ tokenHash: 'xA', result: 'expired' }],
+    });
+    expect(room.hostView().rejoinRequests.map((request) => request.name)).toEqual(['B', 'C', 'D', 'E', 'F']);
+  });
+
+  it('spaces out new requests after a burst, so nobody can flood the TV', () => {
     const room = makeRoom();
     const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((name) => joinOnline(room, `o${name}`, name));
     ids.forEach((id) => room.disconnect(id, 2));
-    expect(room.join('x1', 'A', 3).kind).toBe('pending');
-    expect(room.join('x2', 'A', 3)).toEqual({ kind: 'refused', code: 'rejoin_busy' });
-    ['B', 'C', 'D', 'E'].forEach((name) => room.join(`x${name}`, name, 3));
+    ['A', 'B', 'C', 'D', 'E'].forEach((name) => expect(room.join(`x${name}`, name, 3).kind).toBe('pending'));
     expect(room.join('xF', 'F', 3)).toEqual({ kind: 'refused', code: 'rejoin_busy' });
+    expect(room.join('xF', 'F', 3 + 10_000).kind).toBe('pending');
   });
 
   it('cancels the request when the real owner comes back', () => {

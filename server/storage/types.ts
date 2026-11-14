@@ -13,6 +13,11 @@ export interface Storage {
   put(key: string, body: Buffer | string, contentType: string): Promise<void>;
   /** Returns null when the key doesn't exist. */
   get(key: string): Promise<StoredObject | null>;
+  /**
+   * Copies an object to a local file without holding it all in memory, for videos. Returns its
+   * size, or null when the key doesn't exist.
+   */
+  download(key: string, path: string): Promise<number | null>;
   delete(key: string): Promise<void>;
   /** Returns every key under a prefix. */
   list(prefix: string): Promise<string[]>;

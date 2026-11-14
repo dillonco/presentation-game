@@ -90,6 +90,9 @@ export function spaceFullMessage(error: unknown): string | null {
   if (error.body.error === 'too_many_videos') {
     return 'this space holds as many videos as it can. Use a photo, or delete a deck with videos you no longer need.';
   }
+  if (error.body.error === 'space_full') {
+    return 'this space holds as much as it can. Delete a deck with photos or videos you no longer need to make room.';
+  }
   if (error.body.error === 'too_many_decks') return 'This space holds as many decks as it can. Delete one to make room.';
   return null;
 }

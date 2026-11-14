@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   emptyTip,
+  isMapLink,
   MAX_PLACE_NAME,
   MAX_TIP_HEADING,
   MAX_TIP_PLACES,
@@ -155,9 +156,12 @@ export function TipsEditor({ tips, uploads, onChange }: {
                             />
                           )}
                         </Field>
-                        <a className="desk-hint" href={place.url} target="_blank" rel="noopener noreferrer">
-                          Check in Maps
-                        </a>
+                        {/* Only a real Maps link becomes a link: an imported deck could hold anything. */}
+                        {isMapLink(place.url) && (
+                          <a className="desk-hint" href={place.url} target="_blank" rel="noopener noreferrer">
+                            Check in Maps
+                          </a>
+                        )}
                         <Key
                           label="Remove"
                           context={`Place ${number + 1}, ${name}`}

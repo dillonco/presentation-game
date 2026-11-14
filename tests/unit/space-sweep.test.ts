@@ -44,7 +44,7 @@ describe('clearing out spaces nobody uses', () => {
     const space = await options.spaces.create();
     const photo = newImageId();
     await options.media.save(photo, 'full', PHOTO);
-    await options.media.claim(space.id, photo);
+    await options.media.claim(space.id, photo, PHOTO.length);
     await options.decks.create(space.id, emptyDeck());
     return { space, photo };
   }

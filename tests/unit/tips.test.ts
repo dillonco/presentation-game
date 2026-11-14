@@ -34,6 +34,14 @@ describe('reading a Google Maps address', () => {
     expect(placeFromMapUrl(FULL)).toEqual({ name: 'Bar Nami!', lat: 34.388958, lng: 132.44987 });
   });
 
+  it('keeps the name as it is when its escapes are broken, rather than failing', () => {
+    expect(placeFromMapUrl('https://www.google.com/maps/place/Caf%E0%A4%A/@1.5,2.5,15z')).toEqual({
+      name: 'Caf%E0%A4%A',
+      lat: 1.5,
+      lng: 2.5,
+    });
+  });
+
   it('falls back to the camera, or a query of coordinates', () => {
     expect(placeFromMapUrl('https://www.google.com/maps/place/Somewhere/@35.1,139.2,15z')).toEqual({
       name: 'Somewhere',

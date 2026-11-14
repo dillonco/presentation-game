@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanJpeg, MAX_IMAGE_SIDE, MediaStore, newImageId } from '../../server/media.js';
+import { cleanJpeg, MAX_IMAGE_SIDE, MediaStore, newImageId, newVideoId } from '../../server/media.js';
 import { DiskStorage } from '../../server/storage/disk.js';
 
 const WITH_GPS = readFileSync('tests/fixtures/gps.jpg');
@@ -183,6 +183,37 @@ describe('the photo store', () => {
 
   it('refuses a name that could reach outside its folder', async () => {
     await expect(media.read('../../etc/passwd', 'full')).rejects.toThrow('Invalid image id');
+  });
+
+  it('fetches a video once for a crowd asking at the same moment, streaming it to disk', async () => {
+    const id = newVideoId();
+    await storage.put(`images/${id}/video.mp4`, Buffer.alloc(1024, 7), 'video/mp4');
+    let downloads = 0;
+    const download = storage.download.bind(storage);
+    storage.download = async (key, path) => {
+      downloads += 1;
+      return download(key, path);
+    };
+    const fresh = new MediaStore(storage, join(root, 'crowd'));
+    const paths = await Promise.all(Array.from({ length: 20 }, () => fresh.videoFile(id)));
+    expect(new Set(paths).size).toBe(1);
+    expect(paths[0]).toMatch(/video\.mp4$/);
+    expect(downloads).toBe(1);
+    expect(await fresh.videoFile(newVideoId())).toBeNull();
+  });
+
+  it("adds up what each space keeps, as photos are claimed, grown and deleted", async () => {
+    const space = 'abcdefghijklmnop';
+    const id = newImageId();
+    await media.save(id, 'full', PLAIN);
+    await media.claim(space, id, PLAIN.length);
+    expect(await media.bytesOwned(space)).toBe(PLAIN.length);
+    await media.addBytes(space, id, 100);
+    expect(await media.bytesOwned(space)).toBe(PLAIN.length + 100);
+    // Worked out again from storage by another server, it's the same.
+    expect(await new MediaStore(storage, join(root, 'other')).bytesOwned(space)).toBe(PLAIN.length + 100);
+    await media.deleteOwned(space, id);
+    expect(await media.bytesOwned(space)).toBe(0);
   });
 
   it('survives warming photos that are missing', async () => {

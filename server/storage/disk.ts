@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, relative, sep } from 'node:path';
 import { assertSafeKey, assertSafePrefix, type Storage, type StoredObject } from './types.js';
@@ -38,6 +38,17 @@ export class DiskStorage implements Storage {
       if (isMissing(error)) return null;
       throw error;
     }
+  }
+
+  async download(key: string, path: string): Promise<number | null> {
+    assertSafeKey(key);
+    try {
+      await copyFile(join(this.root, key), path);
+    } catch (error) {
+      if (isMissing(error)) return null;
+      throw error;
+    }
+    return (await stat(path)).size;
   }
 
   async delete(key: string): Promise<void> {
