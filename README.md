@@ -110,7 +110,8 @@ docker compose up -d
 | `MEDIA_CACHE_MB` | How much local disk the copy of photos and videos may use. Defaults to `2048`. |
 | `HOSTED` | `true` to let anyone use your server. See below. |
 | `MAX_SPACES` | How many spaces a hosted server keeps at once. Defaults to `5000`. |
-| `TRUST_PROXY` | How many proxies are in front of the server, usually `1` on a host. Then each visitor gets their own limits on new spaces, code guesses and connections. Leave it out when nothing is in front, or anyone could claim any address. |
+| `TRUST_PROXY` | How many proxies are in front of the server, usually `1` on a host. Then each visitor gets their own limits on new spaces, code guesses and connections. Leave it out when nothing is in front, or anyone could claim any address. Only set it if the proxy passes on real visitor addresses: signed in, `/api/admin/stats` shows `yourAddress`, which should be your own. |
+| `FORCE_HTTPS` | `true` to send every visitor to HTTPS and refuse sign-in over plain HTTP. Set it on a public server unless the host already redirects. |
 
 [`.env.example`](.env.example) lists them all. A game in progress is saved as it goes, so a restart or redeploy only pauses it: the TV and phones reconnect by themselves, on the same screen, with their answers and scores. Still, don't deploy during the party.
 
@@ -120,7 +121,7 @@ A game holds up to 50 guests. Before a big night, [`docs/rehearsal.md`](docs/reh
 
 With `HOSTED=true`, anyone who opens the server can press **Make my space** and start building, with no account. Each space gets a 6-letter join code: the TV shows it under the QR code, and guests can type it on the home page instead of scanning. The browser that made the space is its presenter. A private presenter link, shown in the space, signs in another device.
 
-Each space only ever sees its own decks, photos and games, and the TV only runs for the space that started the game. A space can keep 20 decks and 400 photos (10 of them videos), and run 2 games at once. A space nobody uses for 180 days is deleted with everything in it, and one that never got a deck or photo goes after a day. Resetting the presenter link signs out every other device. `ADMIN_PASSWORD` still opens your own space, and only it can see `/api/admin/stats`.
+Each space only ever sees its own decks, photos and games, and the TV only runs for the space that started the game. A space can keep 20 decks and 400 photos (10 of them videos) up to 1 GB, and run 2 games at once. A tenth of the server's game slots are kept for `ADMIN_PASSWORD`'s own space, and when the rest are full, a hosted game with no TV open for half an hour makes way. A space nobody uses for 180 days is deleted with everything in it, and one that never got a deck or photo goes after a day. Resetting the presenter link signs out every other device. `ADMIN_PASSWORD` still opens your own space, and only it can see `/api/admin/stats`.
 
 ## Build your deck
 

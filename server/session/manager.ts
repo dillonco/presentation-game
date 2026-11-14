@@ -10,6 +10,11 @@ const RETRY_DELAY_MS = 5000;
 const ROOM_LIFETIME_MS = 24 * 60 * 60 * 1000;
 /** How long a hosted game nobody has joined keeps its slot once the server is full. */
 const UNPLAYED_LIFETIME_MS = 60 * 60 * 1000;
+/**
+ * How long a hosted game keeps its slot with no TV watching it, once the server is full. A
+ * game that's really being played has its TV open, and the presenter can start it again.
+ */
+const UNWATCHED_LIFETIME_MS = 30 * 60 * 1000;
 /** Every live game is held in memory, so there's a ceiling on how many can run at once. */
 export const MAX_LIVE_ROOMS = 500;
 
@@ -54,6 +59,8 @@ export interface ManagerOptions {
   snapshotDelayMs?: number;
   onSnapshotError?: (error: unknown) => void;
   maxRooms?: number;
+  /** Slots only the main space may use, so hosted spaces can never take every one. A tenth by default. */
+  reservedForMain?: number;
 }
 
 interface Entry {
@@ -71,7 +78,11 @@ export class RoomManager {
   private readonly snapshotDelayMs: number;
   private readonly onSnapshotError: (error: unknown) => void;
   private readonly maxRooms: number;
+  private readonly reservedForMain: number;
+  /** TVs connected to each game, and since when none has been, for games with none. */
+  private readonly watchers = new Map<string, { count: number; awaySince: number }>();
   readonly now: () => number;
+  private readonly startedAt: number;
 
   constructor(options: ManagerOptions) {
     this.storage = options.storage;
@@ -79,6 +90,8 @@ export class RoomManager {
     this.snapshotDelayMs = options.snapshotDelayMs ?? SNAPSHOT_DELAY_MS;
     this.onSnapshotError = options.onSnapshotError ?? (() => undefined);
     this.maxRooms = options.maxRooms ?? MAX_LIVE_ROOMS;
+    this.reservedForMain = options.reservedForMain ?? Math.floor(this.maxRooms / 10);
+    this.startedAt = this.now();
   }
 
   /** Runs before the server starts listening, so a returning phone always finds its room. */
@@ -109,17 +122,47 @@ export class RoomManager {
   }
 
   async create(setup: RoomSetup): Promise<Room> {
-    if (this.entries.size >= this.maxRooms) {
-      // Games nobody has touched for a day make way first, then hosted games nobody ever joined.
+    const main = (setup.space ?? MAIN_SPACE) === MAIN_SPACE;
+    const full = () =>
+      this.entries.size >= this.maxRooms || (!main && this.hostedCount() >= this.maxRooms - this.reservedForMain);
+    if (full()) {
+      // Games nobody has touched for a day make way first, then hosted games nobody ever joined,
+      // then hosted games nobody is watching.
       await this.sweep();
-      if (this.entries.size >= this.maxRooms) await this.dropUnplayed();
-      if (this.entries.size >= this.maxRooms) throw new TooManyRoomsError();
+      if (full()) await this.dropUnplayed();
+      if (full()) await this.dropUnwatched();
+      if (full()) throw new TooManyRoomsError();
     }
     // 128 random bits, so a room link can't practically be guessed.
     const room = new Room(randomId(16), setup, this.now());
     this.entries.set(room.id, this.entryFor(room));
+    // Its TV is about to open. Until it does, the game counts as unwatched from now.
+    this.watchers.set(room.id, { count: 0, awaySince: this.now() });
     await this.saveNow(room.id);
     return room;
+  }
+
+  /** Called as each TV connects to a game and leaves it. */
+  watching(roomId: string, change: 1 | -1): void {
+    if (!this.entries.has(roomId)) return;
+    const now = this.now();
+    const entry = this.watchers.get(roomId) ?? { count: 0, awaySince: now };
+    entry.count = Math.max(0, entry.count + change);
+    if (entry.count === 0) entry.awaySince = now;
+    this.watchers.set(roomId, entry);
+  }
+
+  private hostedCount(): number {
+    let count = 0;
+    for (const { room } of this.entries.values()) if (room.space !== MAIN_SPACE) count += 1;
+    return count;
+  }
+
+  /** Since when nobody has watched a game. A game no TV has opened since the server started counts from its start. */
+  private awaySince(room: Room): number | null {
+    const entry = this.watchers.get(room.id);
+    if (!entry) return this.startedAt;
+    return entry.count > 0 ? null : entry.awaySince;
   }
 
   get(roomId: string): Room | undefined {
@@ -244,8 +287,26 @@ export class RoomManager {
     const oldest = this.list()
       .filter((room) => room.space !== MAIN_SPACE && room.playerCount === 0 && room.updatedAt < cutoff)
       .sort((a, b) => a.updatedAt - b.updatedAt)[0];
-    if (!oldest) return;
-    const room = await this.delete(oldest.id).catch((error) => {
+    if (oldest) await this.drop(oldest);
+  }
+
+  /**
+   * Frees the hosted game that has gone longest with no TV watching, if that's 30 minutes. A
+   * guest can keep a game looking busy, but only its signed-in presenter can watch it.
+   */
+  private async dropUnwatched(): Promise<void> {
+    const cutoff = this.now() - UNWATCHED_LIFETIME_MS;
+    let oldest: { room: Room; since: number } | null = null;
+    for (const room of this.list()) {
+      if (room.space === MAIN_SPACE) continue;
+      const since = this.awaySince(room);
+      if (since !== null && since < cutoff && (!oldest || since < oldest.since)) oldest = { room, since };
+    }
+    if (oldest) await this.drop(oldest.room);
+  }
+
+  private async drop(target: Room): Promise<void> {
+    const room = await this.delete(target.id).catch((error) => {
       this.onSnapshotError(error);
       return null;
     });
@@ -257,6 +318,7 @@ export class RoomManager {
     const entry = this.entries.get(roomId);
     if (!entry) return null;
     this.entries.delete(roomId);
+    this.watchers.delete(roomId);
     if (entry.timer) clearTimeout(entry.timer);
     entry.timer = null;
     entry.dirty = false;

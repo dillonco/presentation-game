@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
 import { z } from 'zod';
-import { AdminAuth, registerAuthRoutes, requireMainSpace, setSessionCookie, SPACE_SESSION_SECONDS } from './auth.js';
+import { AdminAuth, overHttps, registerAuthRoutes, requireMainSpace, setSessionCookie, SPACE_SESSION_SECONDS } from './auth.js';
 import { deckRoutes, registerMediaRoute, type SpaceLimits } from './deck-routes.js';
 import { DeckStore } from './decks.js';
 import { MediaStore } from './media.js';
@@ -43,6 +43,13 @@ export interface AppOptions {
   trustProxy?: number;
   maxAddressConnections?: number;
   /**
+   * Sends every visitor to HTTPS. FORCE_HTTPS=true. Only for a server behind a proxy that says
+   * which a request arrived over (X-Forwarded-Proto), as every HTTPS host does.
+   */
+  forceHttps?: boolean;
+  /** How often a connected TV's session is checked again. Tests shorten it. */
+  sessionCheckMs?: number;
+  /**
    * Lets anyone make their own space, with no account, and join games by code. Set HOSTED=true
    * to run a public server. Off, the server is yours alone, opened with ADMIN_PASSWORD.
    */
@@ -56,7 +63,7 @@ export interface AppOptions {
 }
 
 /** What each hosted space may keep. */
-export const HOSTED_LIMITS: SpaceLimits = { decks: 20, media: 400, games: 2, videos: 10 };
+export const HOSTED_LIMITS: SpaceLimits = { decks: 20, media: 400, games: 2, videos: 10, bytes: 1024 * 1024 * 1024 };
 
 const claimSchema = z.strictObject({ key: z.string().max(100) });
 
@@ -79,9 +86,12 @@ const YOUTUBE_SCRIPTS = 'https://www.youtube.com';
 /** The privacy-enhanced player, which sets no cookies until a video plays. */
 const YOUTUBE_FRAMES = 'https://www.youtube-nocookie.com';
 
+/** A Host header that's only a name or address and a port, so it's safe to put in a header. */
+const SAFE_HOST = /^[A-Za-z0-9.:[\]-]+$/;
+
 /** Only scripts, styles and fonts from this server run. Guest text can never become code. */
 function contentSecurityPolicy(host: string | undefined, path: string): string {
-  const socketOrigin = host && /^[A-Za-z0-9.:[\]-]+$/.test(host) ? ` wss://${host} ws://${host}` : '';
+  const socketOrigin = host && SAFE_HOST.test(host) ? ` wss://${host} ws://${host}` : '';
   const builder = path === '/admin' || path.startsWith('/admin/');
   // Define it's word clips play in YouTube's player, on the TV and in the builder's preview. Phones never get it.
   const youtube = builder || path.startsWith('/host/');
@@ -141,6 +151,9 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
         }
       : false,
     bodyLimit: 1024 * 1024,
+    // A slow upload can't hold one of the few upload slots for ever. 10 minutes is enough for
+    // a 100 MB video over a weak connection.
+    requestTimeout: 10 * 60 * 1000,
     // Behind Kiteware or another proxy, so request.ip is the visitor rather than the proxy.
     trustProxy: hops > 0 ? (_address: string, hop: number) => hop < hops : false,
   });
@@ -155,6 +168,8 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
     // Fall back to long polling on networks that block WebSockets.
     transports: ['websocket', 'polling'],
     connectionStateRecovery: undefined,
+    // A connection that never says which room it wants gives up its place quickly.
+    connectTimeout: 10_000,
   });
 
   const sessionSecret = options.sessionSecret ?? process.env.SESSION_SECRET;
@@ -180,12 +195,29 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
   const restored = await rooms.restore();
   if (restored > 0) fastify.log.info({ restored }, 'Restored rooms from storage');
+  const forceHttps = options.forceHttps ?? ['true', '1'].includes(process.env.FORCE_HTTPS ?? '');
   const sessions = registerSessions(io, rooms, auth, {
     tickMs: options.tickMs,
     maxRoomConnections: options.maxRoomConnections,
     maxAddressConnections: options.maxAddressConnections,
-    addressOf: (socket) => clientAddress(socket.conn.remoteAddress, socket.handshake.headers['x-forwarded-for'], hops),
+    addressOf: (remote, headers) => clientAddress(remote, headers['x-forwarded-for'], hops),
+    forceHttps,
+    sessionCheckMs: options.sessionCheckMs,
   });
+
+  if (forceHttps) {
+    // Over plain HTTP a sign-in cookie can't be Secure, and anyone on the network could read it.
+    fastify.addHook('onRequest', async (request, reply) => {
+      // The host's health check comes straight to the server, over plain HTTP.
+      if (request.url === '/healthz' || overHttps(request.headers)) return;
+      const host = request.headers.host;
+      if ((request.method === 'GET' || request.method === 'HEAD') && host && SAFE_HOST.test(host)) {
+        await reply.redirect(`https://${host}${request.url}`, 308);
+        return;
+      }
+      await reply.code(403).send({ error: 'https_only' });
+    });
+  }
 
   // Nothing that changes anything may come from another site. Without this, a page elsewhere
   // could post a form here and, say, swap a visitor's browser into a space it controls.
@@ -207,7 +239,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
     const policy = path.startsWith('/media/') ? MEDIA_POLICY : contentSecurityPolicy(request.headers.host, path);
     reply.header('content-security-policy', policy);
     // Only over HTTPS, so a development server on plain HTTP is never pinned to it.
-    if (request.headers['x-forwarded-proto'] === 'https' || request.protocol === 'https') {
+    if (overHttps(request.headers) || request.protocol === 'https') {
       reply.header('strict-transport-security', 'max-age=31536000');
     }
     // No other site may open this one in a window it can reach into, or load its photos and pages.
@@ -301,7 +333,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   loopDelay.enable();
   let lastCpu = process.cpuUsage();
   let lastCpuAt = performance.now();
-  fastify.get('/api/admin/stats', { preHandler: requireMainSpace(auth) }, async () => {
+  fastify.get('/api/admin/stats', { preHandler: requireMainSpace(auth) }, async (request) => {
     const cpu = process.cpuUsage(lastCpu);
     const at = performance.now();
     const cpuPercent = ((cpu.user + cpu.system) / 1000 / Math.max(1, at - lastCpuAt)) * 100;
@@ -316,6 +348,8 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
       loopDelayMs: { p50: ms(loopDelay.percentile(50)), p99: ms(loopDelay.percentile(99)), max: ms(loopDelay.max) },
       connections: io.engine.clientsCount,
       rooms: rooms.list().length,
+      // The address this server thinks you're at, to check that TRUST_PROXY sees real visitors.
+      yourAddress: request.ip,
     };
     loopDelay.reset();
     return stats;

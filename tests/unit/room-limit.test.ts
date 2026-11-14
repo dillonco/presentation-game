@@ -68,4 +68,33 @@ describe('the ceiling on live games', () => {
     now += HOUR / 2;
     await expect(rooms.create(hosted())).rejects.toBeInstanceOf(TooManyRoomsError);
   });
+
+  it('keeps a tenth of the slots for the main space, so hosted spaces can never take every one', async () => {
+    const big = new RoomManager({ storage: new DiskStorage(root), now: () => now, maxRooms: 10, snapshotDelayMs: 1 });
+    try {
+      for (let i = 0; i < 9; i++) await big.create(hosted());
+      await expect(big.create(hosted())).rejects.toBeInstanceOf(TooManyRoomsError);
+      await expect(big.create(SETUP)).resolves.toBeDefined();
+    } finally {
+      big.close();
+      await big.flush();
+    }
+  });
+
+  it('makes way by dropping the hosted game that has gone longest with no TV, once that is half an hour', async () => {
+    const watched = await rooms.create(hosted());
+    watched.join('a'.repeat(43), 'Alex', now);
+    rooms.watching(watched.id, 1);
+    const unwatched = await rooms.create(hosted());
+    // A guest keeps it looking busy, but nobody has its TV open.
+    unwatched.join('b'.repeat(43), 'Sam', now);
+    now += 20 * 60 * 1000;
+    await expect(rooms.create(hosted())).rejects.toBeInstanceOf(TooManyRoomsError);
+    now += 15 * 60 * 1000;
+    unwatched.join('c'.repeat(43), 'Kai', now);
+    const fresh = await rooms.create(hosted());
+    expect(rooms.get(unwatched.id)).toBeUndefined();
+    expect(rooms.get(watched.id)).toBe(watched);
+    expect(rooms.get(fresh.id)).toBe(fresh);
+  });
 });

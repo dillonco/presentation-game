@@ -37,6 +37,7 @@ import { ChoiceRound, type ChoiceConfig } from '../games/choice.js';
 import { PinRound, type PinConfig } from '../games/pin.js';
 import type { Strictness } from '../games/similarity.js';
 import { spotAllowed } from '../outlines.js';
+import { TokenBucket } from './rate-limit.js';
 import { DEFAULT_POINTS, WriteVoteRound, type ActionResult, type RoundConfig } from '../games/write-vote.js';
 
 export function hashToken(token: string): string {
@@ -331,6 +332,9 @@ interface Player {
   offlineSince: number | null;
 }
 
+/** After a burst, how often a new rejoin request may reach the TV. */
+const REJOIN_SPACING_SECONDS = 10;
+
 interface RejoinRequest {
   id: string;
   playerId: string;
@@ -350,7 +354,7 @@ interface StageTimer {
 
 export type JoinOutcome =
   | { kind: 'joined'; playerId: string }
-  | { kind: 'pending'; created: boolean }
+  | { kind: 'pending'; created: boolean; closed?: ClosedRequest[] }
   | { kind: 'refused'; code: ErrorCode };
 
 export type TokenLookup =
@@ -435,6 +439,11 @@ export class Room {
   private readonly playerByKey = new Map<string, string>();
   private readonly revoked = new Map<string, KickReason>();
   private readonly requests = new Map<string, RejoinRequest>();
+  /**
+   * New rejoin requests across the room: enough for a few phones coming back at once, and slow
+   * enough that nobody can flood the TV with prompts. Not saved, so a restart refills it.
+   */
+  private rejoinBucket: TokenBucket | null = null;
 
   constructor(id: string, setup: RoomSetup, now: number) {
     this.id = id;
@@ -590,14 +599,22 @@ export class Room {
   }
 
   private requestRejoin(player: Player, tokenHash: string, now: number): JoinOutcome {
-    const alreadyAsking = [...this.requests.values()].some((request) => request.playerId === player.id);
-    if (alreadyAsking || this.requests.size >= MAX_PENDING_REJOINS) {
-      return { kind: 'refused', code: 'rejoin_busy' };
-    }
+    this.rejoinBucket ??= new TokenBucket(MAX_PENDING_REJOINS, 1 / REJOIN_SPACING_SECONDS, now);
+    if (!this.rejoinBucket.take(now)) return { kind: 'refused', code: 'rejoin_busy' };
+    const closed: ClosedRequest[] = [];
+    const close = (request: RejoinRequest) => {
+      this.requests.delete(request.id);
+      closed.push({ tokenHash: request.tokenHash, result: 'expired' });
+    };
+    // A newer request for the same player replaces the older one, and once the TV holds as many
+    // as it shows, the oldest makes way. Either way, a stranger who asks first can't keep the
+    // real player's new phone from asking.
+    for (const request of [...this.requests.values()]) if (request.playerId === player.id) close(request);
+    while (this.requests.size >= MAX_PENDING_REJOINS) close(this.requests.values().next().value!);
     const id = randomId(9);
     this.requests.set(id, { id, playerId: player.id, tokenHash, expiresAt: now + REJOIN_REQUEST_TTL_MS });
     this.touch(now);
-    return { kind: 'pending', created: true };
+    return closed.length > 0 ? { kind: 'pending', created: true, closed } : { kind: 'pending', created: true };
   }
 
   /** Returns any request that this reconnection cancels: the real owner came back. */

@@ -270,11 +270,36 @@ export class MediaStore {
     await writeFile(temp, body);
     await rename(temp, path);
     this.track(path, body.length);
+    await this.evict(path);
+  }
+
+  /** Removes the least recently used files until the copy fits again, never the one just added. */
+  private async evict(keep: string): Promise<void> {
     // A file being sent stays readable after it's removed, so this never cuts off a video mid-play.
     for (const [oldest] of this.cached) {
-      if (this.cachedBytes <= this.maxCacheBytes || oldest === path) break;
+      if (this.cachedBytes <= this.maxCacheBytes || oldest === keep) break;
       this.untrack(oldest);
       await rm(oldest, { force: true });
+    }
+  }
+
+  /** Videos on their way from storage, so a crowd asking for one at once shares a single copy. */
+  private readonly fetching = new Map<string, Promise<string | null>>();
+
+  /** Streams a video from storage to local disk, never holding all of it in memory. */
+  private async fetchVideo(id: string, path: string): Promise<string | null> {
+    await this.scan();
+    await mkdir(this.cacheDir, { recursive: true });
+    const temp = `${path}.${randomUUID()}.tmp`;
+    try {
+      const size = await this.storage.download(keyFor(id, 'video'), temp);
+      if (size === null) return null;
+      await rename(temp, path);
+      this.track(path, size);
+      await this.evict(path);
+      return path;
+    } finally {
+      await rm(temp, { force: true });
     }
   }
 
@@ -308,10 +333,12 @@ export class MediaStore {
       this.touch(path);
       return path;
     }
-    const stored = await this.storage.get(keyFor(id, 'video'));
-    if (!stored) return null;
-    await this.remember(id, 'video', stored.body);
-    return path;
+    let pending = this.fetching.get(path);
+    if (!pending) {
+      pending = this.fetchVideo(id, path).finally(() => this.fetching.delete(path));
+      this.fetching.set(path, pending);
+    }
+    return pending;
   }
 
   /** A video counts once both it and its poster are here. */
@@ -351,9 +378,11 @@ export class MediaStore {
   /** Spaces already known to own a photo, so autosave doesn't ask storage on every keystroke. */
   private readonly owned = new Set<string>();
 
-  async claim(space: string, id: string): Promise<void> {
+  /** `bytes` is the size of what was just uploaded, for the space's storage limit. */
+  async claim(space: string, id: string, bytes: number): Promise<void> {
     if (space === MAIN_SPACE) return;
-    await this.storage.put(ownerKey(space, id), '', 'text/plain');
+    await this.storage.put(ownerKey(space, id), String(bytes), 'text/plain');
+    this.addUsage(space, bytes);
     // Also kept by photo, so the main space can tell a photo is someone else's before deleting it.
     await this.storage.put(claimKey(id), space, 'text/plain');
     this.rememberOwned(space, id);
@@ -364,6 +393,51 @@ export class MediaStore {
     if (!MEDIA_ID_PATTERN.test(id) || !(await this.storage.get(ownerKey(space, id)))) return false;
     this.rememberOwned(space, id);
     return true;
+  }
+
+  // ---------- How much each space keeps ----------
+  //
+  // Each ownership record holds the bytes stored for that photo or video, and a running total per
+  // space is kept here, worked out from the records the first time it's needed.
+
+  private readonly usage = new Map<string, number>();
+
+  private addUsage(space: string, bytes: number): void {
+    const total = this.usage.get(space);
+    if (total !== undefined) this.usage.set(space, Math.max(0, total + bytes));
+  }
+
+  /** What a record says was stored. Records from before sizes were kept get a typical size. */
+  private recordedBytes(id: string, record: string): number {
+    const bytes = Number(record);
+    if (record !== '' && Number.isInteger(bytes) && bytes >= 0) return bytes;
+    return isVideoId(id) ? 20 * 1024 * 1024 : 1024 * 1024;
+  }
+
+  /** Bytes a space keeps in storage, for its limit. */
+  async bytesOwned(space: string): Promise<number> {
+    const known = this.usage.get(space);
+    if (known !== undefined) return known;
+    const folder = `${spacePrefix(space)}media/`;
+    let total = 0;
+    for (const key of await this.storage.list(folder)) {
+      const record = await this.storage.get(key);
+      if (record) total += this.recordedBytes(key.slice(folder.length), record.body.toString('utf8'));
+    }
+    // A rough cap, like the one on owned photos below.
+    if (this.usage.size > 10_000) this.usage.clear();
+    this.usage.set(space, total);
+    return total;
+  }
+
+  /** Counts a poster or small copy added to a space's photo or video after it was first uploaded. */
+  async addBytes(space: string, id: string, bytes: number): Promise<void> {
+    if (space === MAIN_SPACE) return;
+    const record = await this.storage.get(ownerKey(space, id));
+    if (!record) return;
+    const before = this.recordedBytes(id, record.body.toString('utf8'));
+    await this.storage.put(ownerKey(space, id), String(before + bytes), 'text/plain');
+    this.addUsage(space, bytes);
   }
 
   /** Photos and videos a space has uploaded, for its limit. */
@@ -382,8 +456,10 @@ export class MediaStore {
     if (!(await this.owns(space, id))) return;
     // The main space may show any photo, but a hosted space's photo is still that space's to delete.
     if (space === MAIN_SPACE && (await this.storage.get(claimKey(id)))) return;
+    const record = space === MAIN_SPACE ? null : await this.storage.get(ownerKey(space, id));
     await this.delete(id);
     if (space !== MAIN_SPACE) {
+      if (record) this.addUsage(space, -this.recordedBytes(id, record.body.toString('utf8')));
       await this.storage.delete(ownerKey(space, id));
       await this.storage.delete(claimKey(id));
     }

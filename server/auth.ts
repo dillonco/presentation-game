@@ -17,7 +17,7 @@ export interface SessionHeaders {
   'x-forwarded-proto'?: string | string[];
 }
 
-function overHttps(headers: SessionHeaders): boolean {
+export function overHttps(headers: SessionHeaders): boolean {
   return headers['x-forwarded-proto'] === 'https';
 }
 

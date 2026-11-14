@@ -41,6 +41,8 @@ export interface SpaceLimits {
   games: number;
   /** Of the photos and videos, how many may be videos, which are far bigger. */
   videos?: number;
+  /** Bytes of photos and videos kept in storage, so a space can't fill it with large files. */
+  bytes?: number;
 }
 
 export interface DeckRouteOptions {
@@ -59,8 +61,31 @@ export interface DeckRouteOptions {
   lookUp?: typeof fetch;
   /** How many videos may be arriving at once. */
   maxVideoUploads?: number;
+  /** How many photos may be arriving at once. */
+  maxPhotoUploads?: number;
   /** Whether the sample deck can be added. Only a development server offers it. */
   sampleDeck: boolean;
+}
+
+/**
+ * A ceiling on uploads arriving at once, server-wide, since each is held in memory while it's
+ * checked. Checked before the body is read. The builder retries a refused one.
+ */
+function uploadSlots(max: number) {
+  let arriving = 0;
+  return async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (arriving >= max) {
+      await reply.code(503).header('retry-after', '5').send({ error: 'busy' });
+      return;
+    }
+    arriving += 1;
+    let released = false;
+    reply.raw.once('close', () => {
+      if (released) return;
+      released = true;
+      arriving -= 1;
+    });
+  };
 }
 
 function deckIdFrom(params: unknown): string | null {
@@ -70,7 +95,7 @@ function deckIdFrom(params: unknown): string | null {
 
 /** Everything in here shows real answers, so it all needs a signed-in presenter, and only reaches their own space. */
 export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
-  const { auth, decks, media, rooms, sessions, spaces, limits, fallbackSetup, onError, lookUp = fetch, maxVideoUploads = 4, sampleDeck } = options;
+  const { auth, decks, media, rooms, sessions, spaces, limits, fallbackSetup, onError, lookUp = fetch, maxVideoUploads = 4, maxPhotoUploads = 24, sampleDeck } = options;
 
   /** Photos named in a deck that aren't this space's own. */
   const foreignPhotos = async (space: string, content: DeckContent): Promise<number> => {
@@ -110,36 +135,19 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
     scope.addHook('preHandler', async (request) => {
       if (spaces) await spaces.touch(spaceOf(request));
     });
-    scope.addContentTypeParser(
-      'image/jpeg',
-      { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
-      (_request, body, done) => done(null, body),
-    );
+    // These parsers keep the server's 1 MB limit. Only the upload routes below raise it, each for
+    // itself, so a large body sent to any other route is refused before it's read into memory.
+    scope.addContentTypeParser('image/jpeg', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
     // The builder sends every video as this, whatever the file called itself. MOV files share the format.
-    scope.addContentTypeParser(
-      'video/mp4',
-      { parseAs: 'buffer', bodyLimit: MAX_VIDEO_BYTES },
-      (_request, body, done) => done(null, body),
-    );
+    scope.addContentTypeParser('video/mp4', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
 
     /**
      * A video is held in memory while it's checked, twice over, so only a few may arrive at once.
      * Checked before the body is read. The builder retries a refused one.
      */
-    let videosArriving = 0;
-    const holdUploadSlot = async (_request: FastifyRequest, reply: FastifyReply) => {
-      if (videosArriving >= maxVideoUploads) {
-        await reply.code(503).header('retry-after', '5').send({ error: 'busy' });
-        return;
-      }
-      videosArriving += 1;
-      let released = false;
-      reply.raw.once('close', () => {
-        if (released) return;
-        released = true;
-        videosArriving -= 1;
-      });
-    };
+    const holdUploadSlot = uploadSlots(maxVideoUploads);
+    /** Photos are smaller, but they're held in memory too, so there's a ceiling on them as well. */
+    const holdPhotoSlot = uploadSlots(maxPhotoUploads);
 
     /** The space's join code and presenter link, on a hosted server. */
     scope.get('/api/admin/space', async (request) => {
@@ -301,18 +309,29 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
         await reply.code(409).send({ error: 'too_many_photos' });
       }
     };
+    // Also checked before the body is read, by the size the upload says it is (or the most it may
+    // be). Uploads arriving at once can each pass before any is counted, but the upload slots keep
+    // how far over that can go small.
+    const roomForBytes = async (request: FastifyRequest, reply: FastifyReply) => {
+      const space = auth.presenterSpace(request.headers);
+      if (limits?.bytes === undefined || !space) return;
+      const declared = Number(request.headers['content-length']) || request.routeOptions.bodyLimit;
+      if ((await media.bytesOwned(space)) + declared > limits.bytes) {
+        await reply.code(409).send({ error: 'space_full' });
+      }
+    };
     const letGo = async (request: FastifyRequest) => {
       holding.get(request)?.();
       holding.delete(request);
     };
-    const counted = { onRequest: roomForMore, onResponse: letGo, onRequestAbort: letGo };
+    const counted = { onRequest: [roomForMore, roomForBytes, holdPhotoSlot], onResponse: letGo, onRequestAbort: letGo, bodyLimit: MAX_UPLOAD_BYTES };
 
     scope.post('/api/admin/images', counted, async (request, reply) => {
       const clean = cleanJpeg(request.body as Buffer);
       if (!clean) return reply.code(400).send({ error: 'not_a_photo' });
       const id = newImageId();
       await media.save(id, 'full', clean.body);
-      await media.claim(spaceOf(request), id);
+      await media.claim(spaceOf(request), id, clean.body.length);
       return { id, width: clean.width, height: clean.height };
     });
 
@@ -337,16 +356,17 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
     scope.post(
       '/api/admin/videos',
       {
-        onRequest: [roomForMore, roomForVideo, holdUploadSlot],
+        onRequest: [roomForMore, roomForVideo, roomForBytes, holdUploadSlot],
         onResponse: [letGo, letGoVideo],
         onRequestAbort: [letGo, letGoVideo],
+        bodyLimit: MAX_VIDEO_BYTES,
       },
       async (request, reply) => {
         const clean = cleanVideo(request.body as Buffer);
         if (!clean) return reply.code(400).send({ error: 'not_a_video' });
         const id = newVideoId();
         await media.save(id, 'video', clean);
-        await media.claim(spaceOf(request), id);
+        await media.claim(spaceOf(request), id, clean.length);
         return { id };
       },
     );
@@ -356,35 +376,38 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
      * phone in a game, so otherwise anyone signed in could swap a picture in a deck that isn't
      * theirs. Sending the same copy again is fine, so the builder's retries still work.
      */
-    const saveOnce = async (id: string, variant: ImageVariant, body: Buffer, reply: FastifyReply) => {
+    const saveOnce = async (space: string, id: string, variant: ImageVariant, body: Buffer, reply: FastifyReply) => {
       const existing = await media.read(id, variant);
       if (existing) {
         if (existing.equals(body)) return { ok: true };
         return reply.code(409).send({ error: 'already_added' });
       }
       await media.save(id, variant, body);
+      await media.addBytes(space, id, body.length);
       return { ok: true };
     };
 
-    scope.put('/api/admin/images/:id/full', async (request, reply) => {
+    const photoUpload = { onRequest: [roomForBytes, holdPhotoSlot], bodyLimit: MAX_UPLOAD_BYTES };
+
+    scope.put('/api/admin/images/:id/full', photoUpload, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!isVideoId(id) || !(await media.owns(spaceOf(request), id)) || !(await media.videoFile(id))) {
         return reply.code(404).send({ error: 'not_found' });
       }
       const clean = cleanJpeg(request.body as Buffer);
       if (!clean) return reply.code(400).send({ error: 'not_a_photo' });
-      return saveOnce(id, 'full', clean.body, reply);
+      return saveOnce(spaceOf(request), id, 'full', clean.body, reply);
     });
 
     // The phone-sized copy. Until it arrives, phones are simply given the full one.
-    scope.put('/api/admin/images/:id/small', async (request, reply) => {
+    scope.put('/api/admin/images/:id/small', photoUpload, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!MEDIA_ID_PATTERN.test(id) || !(await media.owns(spaceOf(request), id)) || !(await media.exists(id))) {
         return reply.code(404).send({ error: 'not_found' });
       }
       const clean = cleanJpeg(request.body as Buffer);
       if (!clean) return reply.code(400).send({ error: 'not_a_photo' });
-      return saveOnce(id, 'small', clean.body, reply);
+      return saveOnce(spaceOf(request), id, 'small', clean.body, reply);
     });
 
     const startRoom = async (setup: RoomSetup, reply: FastifyReply) => {

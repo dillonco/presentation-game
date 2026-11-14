@@ -1,3 +1,4 @@
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import type { Server, Socket } from 'socket.io';
 import type { z } from 'zod';
 import {
@@ -19,7 +20,7 @@ import type {
   HostCommand,
   RejoinResult,
 } from '../../shared/protocol.js';
-import type { AdminAuth } from '../auth.js';
+import { overHttps, type AdminAuth } from '../auth.js';
 import type { ActionResult } from '../games/write-vote.js';
 import { visitorKey } from '../client-address.js';
 import { TokenBucket } from './rate-limit.js';
@@ -29,6 +30,10 @@ import { hashToken, type ClosedRequest, type Room } from './room.js';
 const BROADCAST_DELAY_MS = 30;
 const REQUEST_SWEEP_MS = 5000;
 const MAX_CONNECTIONS = 500;
+/** Room past MAX_CONNECTIONS kept for signed-in TVs, so a crowd of strangers can't lock them out. */
+const HOST_HEADROOM = 50;
+/** How often each TV's session is checked again, so one that has expired stops getting the game. */
+const SESSION_CHECK_MS = 60 * 1000;
 /**
  * Guest connections per room: enough for a full room with a second tab each and phones waiting to rejoin. One guest
  * who knows a single room's link can't fill the whole server and lock every other game out.
@@ -73,11 +78,15 @@ export function registerSessions(
     tickMs?: number;
     maxRoomConnections?: number;
     /** The visitor's address, or null when it can't be known (no trusted proxy). */
-    addressOf?: (socket: Socket) => string | null;
+    addressOf?: (remote: string | undefined, headers: IncomingHttpHeaders) => string | null;
     maxAddressConnections?: number;
+    /** Refuses connections that didn't arrive over HTTPS. */
+    forceHttps?: boolean;
+    sessionCheckMs?: number;
   } = {},
 ): Sessions {
-  const addressOf = options.addressOf ?? (() => null);
+  const findAddress = options.addressOf ?? (() => null);
+  const addressOf = (socket: Socket) => findAddress(socket.conn.remoteAddress, socket.handshake.headers);
   const maxAddressConnections = options.maxAddressConnections ?? MAX_ADDRESS_CONNECTIONS;
   /** Open connections per visitor address, when addresses are known. */
   const addressConnections = new Map<string, number>();
@@ -213,6 +222,7 @@ export function registerSessions(
       if (outcome.kind === 'refused') return { ok: false, code: outcome.code };
       attachToken(socket, room, tokenHash);
       if (outcome.kind === 'pending') {
+        if (outcome.closed) notifyClosed(room, outcome.closed);
         if (outcome.created) changed(room);
         return { ok: true, status: 'pending', title: room.title };
       }
@@ -304,7 +314,10 @@ export function registerSessions(
   }
 
   function registerHost(socket: Socket): void {
-    void socket.join(hostChannel((socket.data as SocketState).roomId));
+    const { roomId } = socket.data as SocketState;
+    void socket.join(hostChannel(roomId));
+    rooms.watching(roomId, 1);
+    socket.on('disconnect', () => rooms.watching(roomId, -1));
     on(socket, 'host:hello', emptySchema, (_payload, room) => ({ ok: true, view: room.hostView() }));
     on(socket, 'host:command', hostCommandSchema, (command, room) => {
       // Checked on every command too, so an expired session can't keep driving the game.
@@ -313,10 +326,40 @@ export function registerSessions(
     });
   }
 
+  // Every connection counts from its very first request, before it says which room it wants.
+  // One that never says, or that the checks below refuse, still holds its place until the
+  // connect timeout, so these ceilings are what stop idle connections from filling the server.
+  // They sit a little above the limits below, which give a friendlier answer.
+  const engineAddressConnections = new Map<string, number>();
+  const engineAddressCeiling = Math.ceil(maxAddressConnections * 1.5);
+  io.engine.opts.allowRequest = (request: IncomingMessage, callback: (error: string | null | undefined, ok: boolean) => void) => {
+    const { headers } = request;
+    if (options.forceHttps && !overHttps(headers)) return callback('https_only', false);
+    const total = io.engine.clientsCount;
+    if (total >= MAX_CONNECTIONS + HOST_HEADROOM) return callback('slow_down', false);
+    if (total >= MAX_CONNECTIONS && auth.presenterSpace(headers) === null) return callback('slow_down', false);
+    const found = findAddress(request.socket.remoteAddress, headers);
+    const address = found && visitorKey(found);
+    if (address && (engineAddressConnections.get(address) ?? 0) >= engineAddressCeiling) return callback('slow_down', false);
+    callback(null, true);
+  };
+  io.engine.on('connection', (raw: { request: IncomingMessage; once(event: 'close', listener: () => void): void }) => {
+    const found = findAddress(raw.request.socket.remoteAddress, raw.request.headers);
+    const address = found && visitorKey(found);
+    if (!address) return;
+    engineAddressConnections.set(address, (engineAddressConnections.get(address) ?? 0) + 1);
+    raw.once('close', () => {
+      const left = (engineAddressConnections.get(address) ?? 1) - 1;
+      if (left > 0) engineAddressConnections.set(address, left);
+      else engineAddressConnections.delete(address);
+    });
+  });
+
   io.use((socket, next) => {
     const handshake = handshakeSchema.safeParse(socket.handshake.auth);
     if (!handshake.success) return next(new Error('bad_request'));
-    if (io.engine.clientsCount > MAX_CONNECTIONS) return next(new Error('slow_down'));
+    // Signed-in TVs are checked below instead, and have the headroom above.
+    if (handshake.data.role === 'guest' && io.of('/').sockets.size >= MAX_CONNECTIONS) return next(new Error('slow_down'));
     // A whole party can share one address on venue wifi, so this is generous. It stops one
     // machine from taking every connection the server has.
     const found = addressOf(socket);
@@ -374,6 +417,18 @@ export function registerSessions(
     else registerGuest(socket);
   });
 
+  // The session is checked when a TV connects and on every command, but a TV only watching
+  // would otherwise keep getting every screen, answers included, after its session ran out.
+  const sessionChecker = setInterval(() => {
+    for (const socket of io.of('/').sockets.values()) {
+      const state = socket.data as SocketState | undefined;
+      if (state?.role !== 'host') continue;
+      const room = rooms.get(state.roomId);
+      if (!room || auth.presenterSpace(socket.handshake.headers) !== room.space) socket.disconnect(true);
+    }
+  }, options.sessionCheckMs ?? SESSION_CHECK_MS);
+  sessionChecker.unref();
+
   const sweeper = setInterval(() => {
     for (const room of rooms.list()) {
       if (!room.hasPendingRequests) continue;
@@ -411,6 +466,7 @@ export function registerSessions(
     },
     close() {
       clearInterval(sweeper);
+      clearInterval(sessionChecker);
       clearInterval(ticker);
       for (const timer of pendingBroadcasts.values()) clearTimeout(timer);
       pendingBroadcasts.clear();

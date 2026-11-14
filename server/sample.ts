@@ -29,6 +29,7 @@ export const SAMPLE_PHOTO_COUNT = PLACES.length + CAPTIONS.length + QUESTIONS.le
 
 async function addPhoto(media: MediaStore, space: string, file: string): Promise<string> {
   const id = newImageId();
+  let bytes = 0;
   for (const [variant, name] of [
     ['full', `${file}.jpg`],
     ['small', `${file}.small.jpg`],
@@ -36,8 +37,9 @@ async function addPhoto(media: MediaStore, space: string, file: string): Promise
     const clean = cleanJpeg(await readFile(new URL(name, FOLDER)));
     if (!clean) throw new Error(`Sample photo ${name} isn't a complete JPEG`);
     await media.save(id, variant, clean.body);
+    bytes += clean.body.length;
   }
-  await media.claim(space, id);
+  await media.claim(space, id, bytes);
   return id;
 }
 
