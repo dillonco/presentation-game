@@ -1,8 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { MAX_FLAGGED_TRIES } from '../../shared/constants.js';
-import { answerProblem, cleanName, hitsBlocklist } from '../../shared/names.js';
-import type { BallotEntry, ErrorCode, RevealRow } from '../../shared/protocol.js';
+import { MAX_ANSWER_LENGTH, MAX_FLAGGED_TRIES } from '../../shared/constants.js';
+import { cleanName, hitsBlocklist, textProblem } from '../../shared/names.js';
+import type { BallotEntry, CommandReply, RevealRow } from '../../shared/protocol.js';
+import { revealRowTimes } from '../../shared/reveal.js';
+import { randomId } from '../ids.js';
+import { actionSchema, actOnce } from './one-answer.js';
 import { tooSimilar, type Strictness } from './similarity.js';
 
 /** A short wait between flagged tries, on top of the limit on how many there can be. */
@@ -10,7 +13,7 @@ export const FLAGGED_WAIT_MS = 2000;
 const EXTRA_VOTE_MS_PER_ENTRY = 3000;
 const ENTRIES_WITHOUT_EXTRA_TIME = 8;
 
-export interface PointRules {
+interface PointRules {
   /** Define it: finding the real answer. */
   findReal: number;
   /** Define it: each person fooled, up to a maximum so one entry can't run away with the game. */
@@ -46,8 +49,6 @@ export interface RoundConfig {
   blocklist: string[];
 }
 
-export type ActionResult = { ok: true } | { ok: false; code: ErrorCode };
-
 interface Entry {
   id: string;
   text: string;
@@ -59,13 +60,11 @@ interface Entry {
   masked: boolean;
 }
 
-export interface PlayerResult {
+interface PlayerResult {
   foundReal: boolean;
   votes: number;
   points: number;
 }
-
-const actionSchema = z.object({ seq: z.number(), reply: z.any() });
 
 const stateSchema = z.object({
   seed: z.string(),
@@ -93,28 +92,6 @@ const stateSchema = z.object({
 
 export type RoundState = z.infer<typeof stateSchema>;
 
-/**
- * Makes repeats harmless. The same number returns the original result and changes
- * nothing, and an older number is ignored, so a delayed retry can't undo a newer edit.
- */
-export function actOnce(
-  actions: Map<string, { seq: number; reply: ActionResult }>,
-  key: string,
-  seq: number,
-  action: () => ActionResult,
-): ActionResult {
-  const last = actions.get(key);
-  if (last && seq === last.seq) return last.reply;
-  if (last && seq < last.seq) return { ok: false, code: 'stale_action' };
-  const reply = action();
-  actions.set(key, { seq, reply });
-  return reply;
-}
-
-function randomId(): string {
-  return randomBytes(9).toString('base64url');
-}
-
 function orderKey(...parts: string[]): string {
   return createHash('sha256').update(parts.join(':')).digest('base64url');
 }
@@ -132,13 +109,13 @@ export class WriteVoteRound {
   private readonly voteCleared = new Set<string>();
   private results: Map<string, PlayerResult> | null = null;
   private readonly leftPage = new Set<string>();
-  private readonly actions = new Map<string, { seq: number; reply: ActionResult }>();
+  private readonly actions = new Map<string, { seq: number; reply: CommandReply }>();
 
   constructor(
     readonly config: RoundConfig,
     state?: RoundState,
   ) {
-    this.seed = state?.seed ?? randomBytes(16).toString('base64url');
+    this.seed = state?.seed ?? randomId(16);
     if (!state) return;
     for (const [key, value] of state.answers) this.answers.set(key, value);
     for (const [key, value] of state.flagged) this.flagged.set(key, value);
@@ -169,7 +146,7 @@ export class WriteVoteRound {
     };
   }
 
-  act(stage: 'write' | 'vote', playerId: string, seq: number, action: () => ActionResult): ActionResult {
+  act(stage: 'write' | 'vote', playerId: string, seq: number, action: () => CommandReply): CommandReply {
     return actOnce(this.actions, `${stage}:${playerId}`, seq, action);
   }
 
@@ -188,9 +165,9 @@ export class WriteVoteRound {
   }
 
   /** Answers are checked one at a time, so two identical answers sent together can't both pass. */
-  submitAnswer(playerId: string, raw: string, now: number): ActionResult {
+  submitAnswer(playerId: string, raw: string, now: number): CommandReply {
     const text = cleanName(raw);
-    const problem = answerProblem(text);
+    const problem = textProblem(text, MAX_ANSWER_LENGTH);
     if (problem === 'empty') return { ok: false, code: 'answer_empty' };
     if (problem === 'too_long') return { ok: false, code: 'answer_too_long' };
     if (hitsBlocklist(text, this.config.blocklist)) return { ok: false, code: 'answer_blocked' };
@@ -232,14 +209,14 @@ export class WriteVoteRound {
   startVote(): void {
     if (this.entries) return;
     const entries: Entry[] = [...this.answers].map(([authorId, text]) => ({
-      id: randomId(),
+      id: randomId(9),
       text,
       authorId,
       removed: false,
       masked: false,
     }));
     if (this.config.realAnswer !== null) {
-      entries.push({ id: randomId(), text: this.config.realAnswer, authorId: null, removed: false, masked: false });
+      entries.push({ id: randomId(9), text: this.config.realAnswer, authorId: null, removed: false, masked: false });
     }
     this.entries = entries;
   }
@@ -277,7 +254,7 @@ export class WriteVoteRound {
       .map(({ entry }) => ({ id: entry.id, text: entry.text }));
   }
 
-  vote(playerId: string, entryId: string): ActionResult {
+  vote(playerId: string, entryId: string): CommandReply {
     const entry = this.liveEntries.find((candidate) => candidate.id === entryId);
     if (!entry) return { ok: false, code: 'not_found' };
     if (entry.authorId === playerId) return { ok: false, code: 'own_entry' };
@@ -304,7 +281,7 @@ export class WriteVoteRound {
   }
 
   /** Hides an entry from everyone. Anyone who voted for it gets to vote again. */
-  hide(entryId: string): ActionResult {
+  hide(entryId: string): CommandReply {
     const entry = this.entries?.find((candidate) => candidate.id === entryId);
     if (!entry || entry.removed) return { ok: false, code: 'not_found' };
     if (entry.authorId === null) return { ok: false, code: 'cannot_hide' };
@@ -366,6 +343,11 @@ export class WriteVoteRound {
 
   allResults(): Map<string, PlayerResult> {
     return this.results ?? new Map();
+  }
+
+  /** How long the reveal takes to land on the TV. */
+  revealMs(): number {
+    return revealRowTimes(this.revealRows(() => null)).at(-1) ?? 0;
   }
 
   /** Builds from least-voted to most-voted, with the real answer last. */

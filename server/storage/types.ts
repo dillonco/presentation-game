@@ -9,7 +9,6 @@ export interface StoredObject {
  * their disk on each deploy should use S3.
  */
 export interface Storage {
-  readonly backend: 'disk' | 's3';
   put(key: string, body: Buffer | string, contentType: string): Promise<void>;
   /** Returns null when the key doesn't exist. */
   get(key: string): Promise<StoredObject | null>;

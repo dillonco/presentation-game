@@ -16,12 +16,13 @@ import type {
   ActionReply,
   CommandReply,
   ErrorCode,
+  Failure,
   GuestStatus,
   HostCommand,
+  KickReason,
   RejoinResult,
 } from '../../shared/protocol.js';
 import { overHttps, type AdminAuth } from '../auth.js';
-import type { ActionResult } from '../games/write-vote.js';
 import { visitorKey } from '../client-address.js';
 import { TokenBucket } from './rate-limit.js';
 import type { RoomManager } from './manager.js';
@@ -38,9 +39,13 @@ const SESSION_CHECK_MS = 60 * 1000;
  * Guest connections per room: enough for a full room with a second tab each and phones waiting to rejoin. One guest
  * who knows a single room's link can't fill the whole server and lock every other game out.
  */
-export const MAX_ROOM_CONNECTIONS = 150;
-/** Connections from one visitor address, when a trusted proxy says what it is. */
-export const MAX_ADDRESS_CONNECTIONS = 120;
+const MAX_ROOM_CONNECTIONS = 150;
+/**
+ * Connections from one visitor address, when a trusted proxy says what it is. A whole party can
+ * share one address on venue wifi, so this is generous. It stops one machine from taking every
+ * connection the server has.
+ */
+const MAX_ADDRESS_CONNECTIONS = 120;
 const DEFAULT_TICK_MS = 100;
 
 interface SocketState {
@@ -52,6 +57,16 @@ interface SocketState {
 }
 
 type Ack = (reply: unknown) => void;
+
+/** Counts one more against `key`, and returns what takes it off again. */
+function count(counts: Map<string, number>, key: string): () => void {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+  return () => {
+    const left = (counts.get(key) ?? 1) - 1;
+    if (left > 0) counts.set(key, left);
+    else counts.delete(key);
+  };
+}
 
 /** Every connection to a room, host and guests alike, whether or not they've joined yet. */
 const roomChannel = (roomId: string) => `room:${roomId}`;
@@ -81,14 +96,13 @@ export function registerSessions(
   } = {},
 ): Sessions {
   const findAddress = options.addressOf ?? (() => null);
-  const addressOf = (socket: Socket) => findAddress(socket.conn.remoteAddress, socket.handshake.headers);
+  const addressOf = (request: IncomingMessage) => {
+    const found = findAddress(request.socket.remoteAddress, request.headers);
+    return found && visitorKey(found);
+  };
   const maxAddressConnections = options.maxAddressConnections ?? MAX_ADDRESS_CONNECTIONS;
-  /** Open connections per visitor address, when addresses are known. */
-  const addressConnections = new Map<string, number>();
   const maxRoomConnections = options.maxRoomConnections ?? MAX_ROOM_CONNECTIONS;
   const pendingBroadcasts = new Map<string, NodeJS.Timeout>();
-  /** Open guest connections per room, counted from when they connect until they close. */
-  const guestConnections = new Map<string, number>();
   /** What each guest last received, so a vote elsewhere doesn't resend 50 identical ballots. */
   const lastSent = new Map<string, string>();
 
@@ -124,7 +138,7 @@ export function registerSessions(
     }
   }
 
-  function kick(room: Room, tokenHash: string, reason: 'removed' | 'superseded'): void {
+  function kick(room: Room, tokenHash: string, reason: KickReason): void {
     const channel = tokenChannel(room.id, tokenHash);
     io.to(channel).emit('kicked', reason);
     io.in(channel).disconnectSockets(true);
@@ -174,7 +188,7 @@ export function registerSessions(
     });
   }
 
-  function statusFor(room: Room, playerId: string): GuestStatus | { ok: false; code: ErrorCode } {
+  function statusFor(room: Room, playerId: string): GuestStatus | Failure {
     const view = room.guestView(playerId);
     return view ? { ok: true, status: 'joined', view } : { ok: false, code: 'not_found' };
   }
@@ -183,7 +197,7 @@ export function registerSessions(
   function replyToAction(
     socket: Socket,
     room: Room,
-    action: (playerId: string, now: number) => ActionResult,
+    action: (playerId: string, now: number) => CommandReply,
   ): ActionReply {
     const { playerId } = socket.data as SocketState;
     if (!playerId) return { ok: false, code: 'not_found' };
@@ -258,41 +272,31 @@ export function registerSessions(
   }
 
   function runCommand(command: HostCommand, room: Room): CommandReply {
-    const now = rooms.now();
+    const outcome = applyCommand(command, room, rooms.now());
+    if (outcome.ok) changed(room, { immediate: true });
+    return outcome;
+  }
+
+  function applyCommand(command: HostCommand, room: Room, now: number): CommandReply {
     switch (command.type) {
-      case 'next': {
-        const outcome = room.next(command.screenId, now);
-        if (!outcome.ok) return outcome;
-        changed(room, { immediate: true });
-        return { ok: true };
-      }
+      case 'next':
+        return room.next(command.screenId, now);
       case 'skipTimer':
+        return room.skipTimer(command.screenId, now);
       case 'addTime':
-      case 'setPaused': {
-        let outcome;
-        if (command.type === 'skipTimer') outcome = room.skipTimer(command.screenId, now);
-        else if (command.type === 'addTime') outcome = room.addTime(command.screenId, now);
-        else outcome = room.setPaused(command.paused, now);
-        if (!outcome.ok) return outcome;
-        changed(room, { immediate: true });
-        return { ok: true };
-      }
-      case 'hideEntry': {
-        const outcome = room.hideEntry(command.entryId, now);
-        if (!outcome.ok) return outcome;
-        changed(room, { immediate: true });
-        return { ok: true };
-      }
+        return room.addTime(command.screenId, now);
+      case 'setPaused':
+        return room.setPaused(command.paused, now);
+      case 'hideEntry':
+        return room.hideEntry(command.entryId, now);
       case 'setJoinLocked':
         room.setJoinLocked(command.locked, now);
-        changed(room, { immediate: true });
         return { ok: true };
       case 'remove': {
         const removed = room.remove(command.playerId, now);
         if (!removed) return { ok: false, code: 'not_found' };
         notifyClosed(room, removed.closed);
         kick(room, removed.tokenHash, 'removed');
-        changed(room, { immediate: true });
         return { ok: true };
       }
       case 'answerRejoin': {
@@ -302,7 +306,6 @@ export function registerSessions(
         const result: RejoinResult = command.approve && answer.oldHash ? 'approved' : 'denied';
         // Sent to the new phone, which then says hello again and lands in the game.
         io.to(tokenChannel(room.id, answer.requesterHash)).emit('rejoin:result', result);
-        changed(room, { immediate: true });
         return { ok: true };
       }
     }
@@ -322,56 +325,42 @@ export function registerSessions(
   // Every connection counts from its very first request, before it says which room it wants.
   // One that never says, or that the checks below refuse, still holds its place until the
   // connect timeout, so these ceilings are what stop idle connections from filling the server.
-  // They sit a little above the limits below, which give a friendlier answer.
-  const engineAddressConnections = new Map<string, number>();
-  const engineAddressCeiling = Math.ceil(maxAddressConnections * 1.5);
+  const addressConnections = new Map<string, number>();
   io.engine.opts.allowRequest = (request: IncomingMessage, callback: (error: string | null | undefined, ok: boolean) => void) => {
-    const { headers } = request;
-    if (options.forceHttps && !overHttps(headers)) return callback('https_only', false);
+    if (options.forceHttps && !overHttps(request.headers)) return callback('https_only', false);
     const total = io.engine.clientsCount;
+    // Signed-in TVs get some room past the ceiling, so a crowd of strangers can't lock them out.
     if (total >= MAX_CONNECTIONS + HOST_HEADROOM) return callback('slow_down', false);
-    if (total >= MAX_CONNECTIONS && !auth.isSignedIn(headers)) return callback('slow_down', false);
-    const found = findAddress(request.socket.remoteAddress, headers);
-    const address = found && visitorKey(found);
-    if (address && (engineAddressConnections.get(address) ?? 0) >= engineAddressCeiling) return callback('slow_down', false);
+    if (total >= MAX_CONNECTIONS && !auth.isSignedIn(request.headers)) return callback('slow_down', false);
+    const address = addressOf(request);
+    if (address && (addressConnections.get(address) ?? 0) >= maxAddressConnections) return callback('slow_down', false);
     callback(null, true);
   };
   io.engine.on('connection', (raw: { request: IncomingMessage; once(event: 'close', listener: () => void): void }) => {
-    const found = findAddress(raw.request.socket.remoteAddress, raw.request.headers);
-    const address = found && visitorKey(found);
-    if (!address) return;
-    engineAddressConnections.set(address, (engineAddressConnections.get(address) ?? 0) + 1);
-    raw.once('close', () => {
-      const left = (engineAddressConnections.get(address) ?? 1) - 1;
-      if (left > 0) engineAddressConnections.set(address, left);
-      else engineAddressConnections.delete(address);
-    });
+    const address = addressOf(raw.request);
+    if (address) raw.once('close', count(addressConnections, address));
   });
+
+  /** Open guest connections per room, counted from when they connect until they close. */
+  const guestConnections = new Map<string, number>();
 
   io.use((socket, next) => {
     const handshake = handshakeSchema.safeParse(socket.handshake.auth);
     if (!handshake.success) return next(new Error('bad_request'));
-    // Signed-in TVs are checked below instead, and have the headroom above.
-    if (handshake.data.role === 'guest' && io.of('/').sockets.size >= MAX_CONNECTIONS) return next(new Error('slow_down'));
-    // A whole party can share one address on venue wifi, so this is generous. It stops one
-    // machine from taking every connection the server has.
-    const found = addressOf(socket);
-    const address = found && visitorKey(found);
-    if (address && (addressConnections.get(address) ?? 0) >= maxAddressConnections) return next(new Error('slow_down'));
-    const room = rooms.get(handshake.data.room);
-    if (!room) return next(new Error('room_missing'));
+    const { room: roomId, role } = handshake.data;
+    if (!rooms.get(roomId)) return next(new Error('room_missing'));
     // Only guests count, so a crowd of strangers can never lock the signed-in TV out of its own game.
-    if (handshake.data.role === 'guest' && (guestConnections.get(handshake.data.room) ?? 0) >= maxRoomConnections) {
+    if (role === 'guest' && (guestConnections.get(roomId) ?? 0) >= maxRoomConnections) {
       return next(new Error('slow_down'));
     }
-    if (handshake.data.role === 'host') {
+    if (role === 'host') {
       const { origin, host } = socket.handshake.headers;
       const sameOrigin = !origin || (URL.canParse(origin) && new URL(origin).host === host);
       if (!sameOrigin || !auth.isSignedIn(socket.handshake.headers)) return next(new Error('unauthorized'));
     }
     const state: SocketState = {
-      roomId: handshake.data.room,
-      role: handshake.data.role,
+      roomId,
+      role,
       playerId: null,
       tokenHash: null,
       bucket: new TokenBucket(30, 10, rooms.now()),
@@ -382,28 +371,11 @@ export function registerSessions(
 
   io.on('connection', (socket) => {
     const { roomId, role } = socket.data as SocketState;
-    const found = addressOf(socket);
-    const address = found && visitorKey(found);
-    if (address) {
-      addressConnections.set(address, (addressConnections.get(address) ?? 0) + 1);
-      socket.on('disconnect', () => {
-        const left = (addressConnections.get(address) ?? 1) - 1;
-        if (left > 0) addressConnections.set(address, left);
-        else addressConnections.delete(address);
-      });
-    }
-    if (role === 'guest') {
-      guestConnections.set(roomId, (guestConnections.get(roomId) ?? 0) + 1);
-      socket.on('disconnect', () => {
-        const left = (guestConnections.get(roomId) ?? 1) - 1;
-        if (left > 0) guestConnections.set(roomId, left);
-        else guestConnections.delete(roomId);
-      });
-    }
+    if (role === 'guest') socket.on('disconnect', count(guestConnections, roomId));
     void socket.join(roomChannel(roomId));
     // Lets each device work out how far its clock is from the server's.
     on(socket, 'time:sync', emptySchema, () => ({ ok: true, now: rooms.now() }));
-    if ((socket.data as SocketState).role === 'host') registerHost(socket);
+    if (role === 'host') registerHost(socket);
     else registerGuest(socket);
   });
 

@@ -124,9 +124,10 @@ describe('decks and photos', () => {
       await harness.stop();
       harness = await startHarness({ maxRooms: 2 });
       cookie = await harness.signIn();
-      expect((await api('/api/admin/rooms', 'POST')).status).toBe(200);
-      expect((await api('/api/admin/rooms', 'POST')).status).toBe(200);
-      const third = await api('/api/admin/rooms', 'POST');
+      const { id: deckId } = await create();
+      expect((await api('/api/admin/rooms', 'POST', { deckId })).status).toBe(200);
+      expect((await api('/api/admin/rooms', 'POST', { deckId })).status).toBe(200);
+      const third = await api('/api/admin/rooms', 'POST', { deckId });
       expect(third.status).toBe(503);
       expect(await third.json()).toMatchObject({ error: 'too_many_games', problems: [expect.any(String)] });
       expect(harness.app.rooms.list()).toHaveLength(2);
@@ -664,6 +665,7 @@ describe('decks and photos', () => {
 
     it('refuses a deck that does not exist, and a malformed request', async () => {
       expect((await api('/api/admin/rooms', 'POST', { deckId: SOME_DECK_ID })).status).toBe(404);
+      expect((await api('/api/admin/rooms', 'POST')).status).toBe(400);
       expect((await api('/api/admin/rooms', 'POST', { deckId: '../../x' })).status).toBe(400);
       expect((await api('/api/admin/rooms', 'POST', { deckId: SOME_DECK_ID, extra: 1 })).status).toBe(400);
     });

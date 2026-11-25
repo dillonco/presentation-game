@@ -8,7 +8,8 @@ import {
   type DeckSummary,
   type StoredDeck,
 } from '../shared/deck.js';
-import { randomId, type RoomSetup } from './session/room.js';
+import { randomId } from './ids.js';
+import type { RoomSetup } from './session/room.js';
 import type { Storage } from './storage/index.js';
 
 const FOLDER = 'decks/';
@@ -17,7 +18,7 @@ function keyFor(id: string): string {
   return `${FOLDER}${id}.json`;
 }
 
-export type SaveOutcome =
+type SaveOutcome =
   | { kind: 'saved'; deck: StoredDeck }
   | { kind: 'missing' }
   /** Saved from somewhere else since this copy was opened. */
@@ -117,12 +118,7 @@ export function deckToSetup(content: DeckContent): RoomSetup {
           const s = game.settings;
           return {
             type: 'define',
-            settings: {
-              writeMs: s.writeSeconds === undefined ? undefined : s.writeSeconds * 1000,
-              voteMs: s.voteSeconds === undefined ? undefined : s.voteSeconds * 1000,
-              showMs: s.showSeconds === undefined ? undefined : s.showSeconds * 1000,
-              points: definedOnly({ findReal: s.findReal, perFooled: s.perFooled, fooledMax: s.fooledMax }),
-            },
+            settings: writeVoteSettings(s, { findReal: s.findReal, perFooled: s.perFooled, fooledMax: s.fooledMax }),
             items: game.items.map((item) => {
               const clip = clipToPlay(item.clip);
               return { word: cleanName(item.word), definition: cleanName(item.definition), ...(clip ? { clip } : {}) };
@@ -133,23 +129,14 @@ export function deckToSetup(content: DeckContent): RoomSetup {
           const s = game.settings;
           return {
             type: 'caption',
-            settings: {
-              writeMs: s.writeSeconds === undefined ? undefined : s.writeSeconds * 1000,
-              voteMs: s.voteSeconds === undefined ? undefined : s.voteSeconds * 1000,
-              showMs: s.showSeconds === undefined ? undefined : s.showSeconds * 1000,
-              points: definedOnly({ perVote: s.perVote, voteMax: s.voteMax, topBonus: s.topBonus }),
-            },
+            settings: writeVoteSettings(s, { perVote: s.perVote, voteMax: s.voteMax, topBonus: s.topBonus }),
             items: game.items.map((item) => ({ image: item.image, extras: item.extras ?? [] })),
           };
         }
         if (game.type === 'choice') {
-          const s = game.settings;
           return {
             type: 'choice',
-            settings: {
-              answerMs: s.answerSeconds === undefined ? undefined : s.answerSeconds * 1000,
-              points: s.points,
-            },
+            settings: { answerMs: ms(game.settings.answerSeconds), points: game.settings.points },
             items: game.items.map((item) => {
               const order = shuffled(item.options.map((_, index) => index));
               return {
@@ -165,7 +152,7 @@ export function deckToSetup(content: DeckContent): RoomSetup {
         return {
           type: 'geo',
           settings: {
-            guessMs: game.settings.guessSeconds === undefined ? undefined : game.settings.guessSeconds * 1000,
+            guessMs: ms(game.settings.guessSeconds),
             maxPoints: game.settings.maxPoints,
           },
           items: game.items.map((item) => ({
@@ -193,6 +180,18 @@ function shuffled<T>(items: readonly T[]): T[] {
     [result[index], result[other]] = [result[other]!, result[index]!];
   }
   return result;
+}
+
+function ms(seconds: number | undefined): number | undefined {
+  return seconds === undefined ? undefined : seconds * 1000;
+}
+
+/** Define it and Caption this share their timers. Points left out of the deck keep their defaults. */
+function writeVoteSettings(
+  s: { writeSeconds?: number; voteSeconds?: number; showSeconds?: number },
+  points: Record<string, number | undefined>,
+) {
+  return { writeMs: ms(s.writeSeconds), voteMs: ms(s.voteSeconds), showMs: ms(s.showSeconds), points: definedOnly(points) };
 }
 
 function definedOnly<T extends Record<string, number | undefined>>(values: T): Partial<Record<keyof T, number>> {

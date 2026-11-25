@@ -1,19 +1,20 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isVideoId, MEDIA_ID_PATTERN } from '../shared/deck.js';
+import { randomId } from './ids.js';
 import type { Storage } from './storage/index.js';
 
 export const MAX_IMAGE_SIDE = 4096;
 /** How much the local copy may hold before the least recently used files make way. Videos are big. */
-export const DEFAULT_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
+const DEFAULT_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** A video keeps its stills too: `full` and `small` are its poster, shown before it plays and on phones. */
-export type ImageVariant = 'full' | 'small';
-export type MediaVariant = ImageVariant | 'video';
+type ImageVariant = 'full' | 'small';
+type MediaVariant = ImageVariant | 'video';
 
-export interface CleanJpeg {
+interface CleanJpeg {
   body: Buffer;
   width: number;
   height: number;
@@ -190,7 +191,7 @@ export function cleanVideo(input: Buffer): Buffer | null {
 }
 
 export function newImageId(): string {
-  return randomBytes(16).toString('base64url');
+  return randomId(16);
 }
 
 export function newVideoId(): string {

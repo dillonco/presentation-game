@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { io as connect, type Socket } from 'socket.io-client';
 import { createApp, type App, type AppOptions } from '../../server/app.js';
 import { DiskStorage } from '../../server/storage/disk.js';
+import { sampleDeck, type DeckContent } from '../../shared/deck.js';
 import type { GuestView, HostCommand, HostView } from '../../shared/protocol.js';
 
 export const PASSWORD = 'test-password';
@@ -21,7 +22,8 @@ export interface Harness {
   root: string;
   sockets: Socket[];
   signIn(): Promise<string>;
-  createRoom(cookie?: string): Promise<string>;
+  /** Saves a deck, the sample's words unless one is given, and starts a game from it. */
+  createRoom(cookie?: string, deck?: DeckContent): Promise<string>;
   guest(room: string, transports?: ('websocket' | 'polling')[]): Promise<Socket>;
   host(room: string, cookie?: string): Promise<Socket>;
   stop(): Promise<void>;
@@ -64,12 +66,15 @@ export async function startHarness(options: AppOptions = {}): Promise<Harness> {
       return cookie.split(';')[0]!;
     },
 
-    async createRoom(cookie) {
-      const response = await fetch(`${harness.url}/api/admin/rooms`, {
-        method: 'POST',
-        headers: { cookie: cookie ?? (await harness.signIn()) },
-      });
-      return ((await response.json()) as { id: string }).id;
+    async createRoom(cookie, deck = sampleDeck()) {
+      const headers = { cookie: cookie ?? (await harness.signIn()), 'content-type': 'application/json' };
+      const post = async (path: string, body: unknown) => {
+        const response = await fetch(`${harness.url}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+        if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+        return response.json() as Promise<any>;
+      };
+      const { deck: saved } = await post('/api/admin/decks', deck);
+      return (await post('/api/admin/rooms', { deckId: saved.id })).id;
     },
 
     guest(room, transports = ['websocket']) {

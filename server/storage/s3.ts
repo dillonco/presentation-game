@@ -11,7 +11,7 @@ import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { assertSafeKey, assertSafePrefix, type Storage, type StoredObject } from './types.js';
 
-export interface S3Config {
+interface S3Config {
   /** Left out for Amazon S3 itself. */
   endpoint?: string;
   bucket: string;
@@ -22,7 +22,6 @@ export interface S3Config {
 
 /** Amazon S3, or any S3-compatible store such as MinIO or Cloudflare R2. */
 export class S3Storage implements Storage {
-  readonly backend = 's3' as const;
   private readonly client: S3Client;
   private readonly bucket: string;
 

@@ -9,8 +9,7 @@ import { AdminAuth, overHttps, registerAuthRoutes, requireAdmin } from './auth.j
 import { deckRoutes, registerMediaRoute } from './deck-routes.js';
 import { DeckStore } from './decks.js';
 import { MediaStore } from './media.js';
-import { RoomManager, STARTER_SETUP } from './session/manager.js';
-import type { RoomSetup } from './session/room.js';
+import { RoomManager } from './session/manager.js';
 import { registerSessions, type Sessions } from './session/sockets.js';
 import { clientAddress, proxyHops } from './client-address.js';
 import { createStorage, type Storage } from './storage/index.js';
@@ -25,8 +24,6 @@ export interface AppOptions {
   sessionSecret?: string;
   now?: () => number;
   snapshotDelayMs?: number;
-  /** What a new game plays. Tests use it for short decks. */
-  defaultSetup?: RoomSetup;
   tickMs?: number;
   mediaCacheDir?: string;
   /** Tests lower these, rather than opening 150 connections or 500 games. */
@@ -272,7 +269,6 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
       media,
       rooms,
       sessions,
-      fallbackSetup: options.defaultSetup ?? STARTER_SETUP,
       maxVideoUploads: options.maxVideoUploads,
       sampleDeck: options.sampleDeck ?? process.env.NODE_ENV !== 'production',
       onError: (error, message) => fastify.log.error(error, message),

@@ -11,7 +11,7 @@ const COOKIE_NAME = 'tp_admin';
 const SECURE_COOKIE_NAME = `__Host-${COOKIE_NAME}`;
 
 /** The request headers a session is read from. */
-export interface SessionHeaders {
+interface SessionHeaders {
   cookie?: string;
   'x-forwarded-proto'?: string | string[];
 }
@@ -27,7 +27,7 @@ function sessionCookie(headers: SessionHeaders): string | null {
 const SESSION_SECONDS = 12 * 60 * 60;
 const MIN_SECRET_LENGTH = 16;
 
-export interface AuthOptions {
+interface AuthOptions {
   password?: string;
   sessionSecret?: string;
   now?: () => number;
@@ -99,7 +99,7 @@ export class AdminAuth {
   }
 }
 
-export function setSessionCookie(reply: FastifyReply, request: FastifyRequest, value: string, maxAge: number): void {
+function setSessionCookie(reply: FastifyReply, request: FastifyRequest, value: string, maxAge: number): void {
   // Secure, and __Host-, only over HTTPS, so sign-in also works on a local development server.
   const secure = overHttps(request.headers);
   const name = secure ? SECURE_COOKIE_NAME : COOKIE_NAME;

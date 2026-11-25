@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   DEADLINE_GRACE_MS,
@@ -8,17 +8,10 @@ import {
 } from '../../shared/constants.js';
 import { findCountry, type Country } from '../../shared/countries.js';
 import { countryScaleKm } from '../../shared/geo.js';
-import { cleanName, hitsBlocklist, nameKey, nameProblem } from '../../shared/names.js';
-import {
-  CHOICE_REVEAL,
-  PODIUM,
-  pinRevealMs,
-  podiumPlan,
-  revealRowTimes,
-  showcaseMs,
-  type PodiumPlan,
-} from '../../shared/reveal.js';
+import { cleanName, hitsBlocklist, nameKey, textProblem } from '../../shared/names.js';
+import { PODIUM, podiumPlan, showcaseMs, type PodiumPlan } from '../../shared/reveal.js';
 import type {
+  CommandReply,
   ErrorCode,
   GameType,
   GuestScreen,
@@ -31,21 +24,17 @@ import type {
   RoundInfo,
   StandingRow,
   TimerView,
-  TipView,
 } from '../../shared/protocol.js';
-import { ChoiceRound, type ChoiceConfig } from '../games/choice.js';
-import { PinRound, type PinConfig } from '../games/pin.js';
+import { ChoiceRound, type ChoiceState } from '../games/choice.js';
+import { PinRound, type PinState } from '../games/pin.js';
 import type { Strictness } from '../games/similarity.js';
+import { DEFAULT_POINTS, WriteVoteRound, type RoundState } from '../games/write-vote.js';
+import { randomId } from '../ids.js';
 import { spotAllowed } from '../outlines.js';
 import { TokenBucket } from './rate-limit.js';
-import { DEFAULT_POINTS, WriteVoteRound, type ActionResult, type RoundConfig } from '../games/write-vote.js';
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('base64url');
-}
-
-export function randomId(bytes: number): string {
-  return randomBytes(bytes).toString('base64url');
 }
 
 const DEFAULT_WRITE_MS: Record<'define' | 'caption', number> = { define: 60_000, caption: 75_000 };
@@ -88,11 +77,12 @@ const settingsSchema = z
   })
   .optional();
 
+const extras = z.array(z.string()).optional();
+
 const setupSchema = z.object({
   title: z.string(),
   accent: z.object({ light: z.string(), dark: z.string() }).optional(),
   country: z.string().optional(),
-  capacity: z.number().int().positive().optional(),
   blocklist: z.array(z.string()).optional(),
   similarity: z.enum(['loose', 'normal', 'strict']).optional(),
   showLeftPage: z.boolean().optional(),
@@ -124,22 +114,12 @@ const setupSchema = z.object({
         settings: z
           .object({ guessMs: z.number().int().positive().optional(), maxPoints: z.number().int().min(0).optional() })
           .optional(),
-        items: z
-          .array(
-            z.object({
-              image: z.string(),
-              label: z.string(),
-              lat: z.number(),
-              lng: z.number(),
-              extras: z.array(z.string()).optional(),
-            }),
-          )
-          .optional(),
+        items: z.array(z.object({ image: z.string(), label: z.string(), lat: z.number(), lng: z.number(), extras })),
       }),
       z.object({
         type: z.literal('caption'),
         settings: settingsSchema,
-        items: z.array(z.object({ image: z.string(), extras: z.array(z.string()).optional() })).optional(),
+        items: z.array(z.object({ image: z.string(), extras })),
       }),
       z.object({
         type: z.literal('choice'),
@@ -153,7 +133,7 @@ const setupSchema = z.object({
             /** Already shuffled, so the order is the same after a restart. */
             options: z.array(z.string()).min(2),
             answer: z.number().int().min(0),
-            extras: z.array(z.string()).optional(),
+            extras,
           }),
         ),
       }),
@@ -163,14 +143,12 @@ const setupSchema = z.object({
 
 export type RoomSetup = z.infer<typeof setupSchema>;
 
-type Stage = 'write' | 'show' | 'vote' | 'reveal';
-
 type Step =
   | { kind: 'lobby' }
   | { kind: 'title'; gameNumber: number; game: GameType }
-  | { kind: 'round'; stage: Stage; roundIndex: number; info: RoundInfo }
-  | { kind: 'pin'; stage: 'guess' | 'reveal'; roundIndex: number; info: RoundInfo }
-  | { kind: 'choice'; stage: 'pick' | 'reveal'; roundIndex: number; info: RoundInfo }
+  | { kind: 'round'; stage: 'write' | 'show' | 'vote' | 'reveal'; round: WriteVoteRound; info: RoundInfo }
+  | { kind: 'pin'; stage: 'guess' | 'reveal'; round: PinRound; info: RoundInfo }
+  | { kind: 'choice'; stage: 'pick' | 'reveal'; round: ChoiceRound; info: RoundInfo }
   /** More photos from the same moment, once the round's result is in. Only when the deck has some. */
   | { kind: 'gallery'; info: RoundInfo; images: string[]; place: string | null }
   | { kind: 'standings'; gameNumber: number; game: GameType }
@@ -178,143 +156,121 @@ type Step =
   /** Tips after the podium. Only when the deck has some. */
   | { kind: 'tips' };
 
+type RoundStep = Extract<Step, { round: unknown }>;
+type AnyRound = RoundStep['round'];
+/** The stages that take guests' input, and the round each one belongs to. */
+type RoundAt = { write: WriteVoteRound; vote: WriteVoteRound; guess: PinRound; pick: ChoiceRound };
+const TIMED_STAGES: ReadonlySet<string> = new Set<keyof RoundAt>(['write', 'vote', 'guess', 'pick']);
+
+/** Saved round states, handed out in play order as the night is laid out again. */
+interface SavedRounds {
+  rounds: RoundState[];
+  pinRounds: PinState[];
+  choiceRounds: ChoiceState[];
+}
+
+function mapAreaOf(setup: RoomSetup): Country {
+  return findCountry(setup.country ?? DEFAULT_COUNTRY) ?? findCountry(DEFAULT_COUNTRY)!;
+}
+
 /** Lays the night out as one straight line of steps, so moving on is always just the next one. */
-function buildProgram(setup: RoomSetup): {
-  steps: Step[];
-  configs: RoundConfig[];
-  gameOfRound: number[];
-  pinConfigs: PinConfig[];
-  gameOfPin: number[];
-  choiceConfigs: ChoiceConfig[];
-  gameOfChoice: number[];
-} {
+function buildProgram(setup: RoomSetup, saved?: SavedRounds): Step[] {
   const steps: Step[] = [{ kind: 'lobby' }];
-  const configs: RoundConfig[] = [];
-  const gameOfRound: number[] = [];
-  const pinConfigs: PinConfig[] = [];
-  const gameOfPin: number[] = [];
-  const choiceConfigs: ChoiceConfig[] = [];
-  const gameOfChoice: number[] = [];
   const country = setup.country ?? DEFAULT_COUNTRY;
+  const similarity = setup.similarity ?? 'normal';
   setup.games.forEach((game, gameIndex) => {
+    if (game.items.length === 0) return;
     const gameNumber = gameIndex + 1;
-    steps.push({ kind: 'title', gameNumber, game: game.type });
-    if (game.type === 'choice') {
-      if (game.items.length === 0) return;
-      game.items.forEach((item, itemIndex) => {
-        const roundIndex = choiceConfigs.length;
-        choiceConfigs.push({
-          image: item.image,
-          question: item.question,
-          options: item.options,
-          answer: item.answer,
-          answerMs: game.settings?.answerMs ?? DEFAULT_ANSWER_MS,
-          points: game.settings?.points ?? DEFAULT_CHOICE_POINTS,
-        });
-        gameOfChoice.push(gameNumber);
-        const info: RoundInfo = {
-          game: 'choice',
-          gameNumber,
-          number: itemIndex + 1,
-          count: game.items.length,
-          prompt: item.question,
-          image: item.image,
-        };
-        for (const stage of ['pick', 'reveal'] as const) {
-          steps.push({ kind: 'choice', stage, roundIndex, info });
-        }
-        const extras = item.extras ?? [];
-        if (extras.length > 0) steps.push({ kind: 'gallery', info, images: extras, place: null });
-      });
-      steps.push({ kind: 'standings', gameNumber, game: 'choice' });
-      return;
-    }
-    if (game.type === 'geo') {
-      const items = game.items ?? [];
-      if (items.length === 0) return;
-      const area = findCountry(country) ?? findCountry(DEFAULT_COUNTRY)!;
-      items.forEach((item, itemIndex) => {
-        const roundIndex = pinConfigs.length;
-        pinConfigs.push({
-          place: item,
-          guessMs: game.settings?.guessMs ?? DEFAULT_GUESS_MS,
-          maxPoints: game.settings?.maxPoints ?? DEFAULT_PIN_POINTS,
-          scaleKm: countryScaleKm(area),
-          allowed: (spot) => spotAllowed(country, spot),
-        });
-        gameOfPin.push(gameNumber);
-        const info: RoundInfo = {
-          game: 'geo',
-          gameNumber,
-          number: itemIndex + 1,
-          count: items.length,
-          prompt: '',
-          image: item.image,
-        };
-        for (const stage of ['guess', 'reveal'] as const) {
-          steps.push({ kind: 'pin', stage, roundIndex, info });
-        }
-        const extras = item.extras ?? [];
-        if (extras.length > 0) steps.push({ kind: 'gallery', info, images: extras, place: item.label });
-      });
-      steps.push({ kind: 'standings', gameNumber, game: 'geo' });
-      return;
-    }
-    const similarity = setup.similarity ?? 'normal';
-    // Both games are the same round, told apart only by what's on the ballot and how it scores.
-    const rounds =
-      game.type === 'define'
-        ? game.items.map((item) => ({
-            prompt: item.word,
-            image: null,
-            clip: item.clip,
-            realAnswer: item.definition,
-            similarity,
-            extras: [] as string[],
-          }))
-        : (game.items ?? []).map((item) => ({
-            prompt: '',
-            image: item.image,
-            clip: undefined,
-            realAnswer: null,
-            similarity: CAPTION_SIMILARITY[similarity],
-            extras: item.extras ?? [],
-          }));
-    if (rounds.length === 0) return;
-    rounds.forEach((round, itemIndex) => {
-      const roundIndex = configs.length;
-      configs.push({
-        game: game.type,
-        prompt: round.prompt,
-        realAnswer: round.realAnswer,
-        writeMs: game.settings?.writeMs ?? DEFAULT_WRITE_MS[game.type],
-        voteMs: game.settings?.voteMs ?? DEFAULT_VOTE_MS,
-        showMs: game.settings?.showMs,
-        points: { ...DEFAULT_POINTS, ...game.settings?.points },
-        similarity: round.similarity,
-        blocklist: setup.blocklist ?? [],
-      });
-      gameOfRound.push(gameNumber);
-      const info: RoundInfo = {
-        game: game.type,
-        gameNumber,
-        number: itemIndex + 1,
-        count: rounds.length,
-        prompt: round.prompt,
-        image: round.image,
-        ...(round.clip ? { clip: round.clip } : {}),
-      };
-      // The answers are the fun, so the room reads each one before anything gets voted on.
-      for (const stage of ['write', 'show', 'vote', 'reveal'] as const) {
-        steps.push({ kind: 'round', stage, roundIndex, info });
-      }
-      if (round.extras.length > 0) steps.push({ kind: 'gallery', info, images: round.extras, place: null });
+    const info = (index: number, prompt: string, image: string | null): RoundInfo => ({
+      game: game.type,
+      gameNumber,
+      number: index + 1,
+      count: game.items.length,
+      prompt,
+      image,
     });
+    const gallery = (roundInfo: RoundInfo, images: string[] = [], place: string | null = null) => {
+      if (images.length > 0) steps.push({ kind: 'gallery', info: roundInfo, images, place });
+    };
+    steps.push({ kind: 'title', gameNumber, game: game.type });
+
+    if (game.type === 'choice') {
+      game.items.forEach((item, index) => {
+        const round = new ChoiceRound(
+          {
+            image: item.image,
+            question: item.question,
+            options: item.options,
+            answer: item.answer,
+            answerMs: game.settings?.answerMs ?? DEFAULT_ANSWER_MS,
+            points: game.settings?.points ?? DEFAULT_CHOICE_POINTS,
+          },
+          saved?.choiceRounds.shift(),
+        );
+        const roundInfo = info(index, item.question, item.image);
+        for (const stage of ['pick', 'reveal'] as const) steps.push({ kind: 'choice', stage, round, info: roundInfo });
+        gallery(roundInfo, item.extras);
+      });
+    } else if (game.type === 'geo') {
+      const scaleKm = countryScaleKm(mapAreaOf(setup));
+      game.items.forEach((item, index) => {
+        const round = new PinRound(
+          {
+            place: item,
+            guessMs: game.settings?.guessMs ?? DEFAULT_GUESS_MS,
+            maxPoints: game.settings?.maxPoints ?? DEFAULT_PIN_POINTS,
+            scaleKm,
+            allowed: (spot) => spotAllowed(country, spot),
+          },
+          saved?.pinRounds.shift(),
+        );
+        const roundInfo = info(index, '', item.image);
+        for (const stage of ['guess', 'reveal'] as const) steps.push({ kind: 'pin', stage, round, info: roundInfo });
+        gallery(roundInfo, item.extras, item.label);
+      });
+    } else {
+      // Both games are the same round, told apart only by what's on the ballot and how it scores.
+      const rounds =
+        game.type === 'define'
+          ? game.items.map((item, index) => ({
+              info: { ...info(index, item.word, null), ...(item.clip ? { clip: item.clip } : {}) },
+              realAnswer: item.definition,
+              similarity,
+              extras: undefined,
+            }))
+          : game.items.map((item, index) => ({
+              info: info(index, '', item.image),
+              realAnswer: null,
+              similarity: CAPTION_SIMILARITY[similarity],
+              extras: item.extras,
+            }));
+      for (const entry of rounds) {
+        const round = new WriteVoteRound(
+          {
+            game: game.type,
+            prompt: entry.info.prompt,
+            realAnswer: entry.realAnswer,
+            writeMs: game.settings?.writeMs ?? DEFAULT_WRITE_MS[game.type],
+            voteMs: game.settings?.voteMs ?? DEFAULT_VOTE_MS,
+            showMs: game.settings?.showMs,
+            points: { ...DEFAULT_POINTS, ...game.settings?.points },
+            similarity: entry.similarity,
+            blocklist: setup.blocklist ?? [],
+          },
+          saved?.rounds.shift(),
+        );
+        // The answers are the fun, so the room reads each one before anything gets voted on.
+        for (const stage of ['write', 'show', 'vote', 'reveal'] as const) {
+          steps.push({ kind: 'round', stage, round, info: entry.info });
+        }
+        gallery(entry.info, entry.extras);
+      }
+    }
     steps.push({ kind: 'standings', gameNumber, game: game.type });
   });
   steps.push({ kind: 'final' });
   if ((setup.tips ?? []).length > 0) steps.push({ kind: 'tips' });
-  return { steps, configs, gameOfRound, pinConfigs, gameOfPin, choiceConfigs, gameOfChoice };
+  return steps;
 }
 
 interface Player {
@@ -338,32 +294,23 @@ interface RejoinRequest {
   expiresAt: number;
 }
 
-interface StageTimer {
-  endsAt: number;
-  totalMs: number;
-  pausedRemainingMs: number | null;
+interface StageTimer extends TimerView {
   /** The drop to a final few seconds happens once, and adding time turns it off. */
   stretchDone: boolean;
-  /** The presenter ended it early, so phones send what's on screen at once. */
-  cutShort: boolean;
 }
 
-export type JoinOutcome =
+type JoinOutcome =
   | { kind: 'joined'; playerId: string }
   | { kind: 'pending'; created: boolean; closed?: ClosedRequest[] }
   | { kind: 'refused'; code: ErrorCode };
 
-export type TokenLookup =
+type TokenLookup =
   | { kind: 'player'; playerId: string }
   | { kind: 'pending' }
   | { kind: 'revoked'; reason: KickReason }
   | { kind: 'unknown' };
 
-export type NextOutcome =
-  | { ok: true }
-  | { ok: false; code: 'stale_screen' | 'at_end' | 'stage_running' | 'no_players' };
-export type TimerOutcome = { ok: true } | { ok: false; code: 'stale_screen' | 'no_timer' };
-export type TickOutcome = 'none' | 'changed' | 'stage';
+type TickOutcome = 'none' | 'changed' | 'stage';
 
 export interface ClosedRequest {
   tokenHash: string;
@@ -396,7 +343,15 @@ const snapshotSchema = z.object({
   choiceRounds: z.array(z.unknown()).optional(),
 });
 
-export type RoomSnapshot = z.infer<typeof snapshotSchema>;
+type RoomSnapshot = z.infer<typeof snapshotSchema>;
+
+const TOO_LATE: CommandReply = { ok: false, code: 'too_late' };
+
+/** Every state parsed, or null if any is damaged. */
+function parseAll<S>(values: unknown[], parse: (value: unknown) => S | null): S[] | null {
+  const states = values.map(parse);
+  return states.every((state) => state !== null) ? (states as S[]) : null;
+}
 
 /**
  * All the rules for one game night, with no networking inside, so each rule can
@@ -405,7 +360,6 @@ export type RoomSnapshot = z.infer<typeof snapshotSchema>;
 export class Room {
   readonly id: string;
   readonly title: string;
-  readonly capacity: number;
   readonly createdAt: number;
   updatedAt: number;
   joinLocked = false;
@@ -413,12 +367,6 @@ export class Room {
 
   private readonly setup: RoomSetup;
   private readonly steps: Step[];
-  private readonly gameOfRound: number[];
-  private readonly rounds: WriteVoteRound[];
-  private readonly gameOfPin: number[];
-  private readonly pinRounds: PinRound[];
-  private readonly gameOfChoice: number[];
-  private readonly choiceRounds: ChoiceRound[];
   private readonly blocklist: string[];
   private screenIndex = 0;
   private timer: StageTimer | null = null;
@@ -441,20 +389,12 @@ export class Room {
    */
   private rejoinBucket: TokenBucket | null = null;
 
-  constructor(id: string, setup: RoomSetup, now: number) {
+  constructor(id: string, setup: RoomSetup, now: number, saved?: SavedRounds) {
     this.id = id;
     this.setup = setup;
     this.title = setup.title;
-    const program = buildProgram(setup);
-    this.steps = program.steps;
-    this.gameOfRound = program.gameOfRound;
-    this.rounds = program.configs.map((config) => new WriteVoteRound(config));
-    this.gameOfPin = program.gameOfPin;
-    this.pinRounds = program.pinConfigs.map((config) => new PinRound(config));
-    this.gameOfChoice = program.gameOfChoice;
-    this.choiceRounds = program.choiceConfigs.map((config) => new ChoiceRound(config));
+    this.steps = buildProgram(setup, saved);
     this.blocklist = setup.blocklist ?? [];
-    this.capacity = setup.capacity ?? MAX_PLAYERS;
     this.createdAt = now;
     this.updatedAt = now;
   }
@@ -467,44 +407,32 @@ export class Room {
   imageIds(): string[] {
     return [
       ...this.setup.games.flatMap((game) =>
-        game.type === 'define' ? [] : (game.items ?? []).flatMap((item) => [item.image, ...(item.extras ?? [])]),
+        game.type === 'define' ? [] : game.items.flatMap((item) => [item.image, ...(item.extras ?? [])]),
       ),
       ...(this.setup.tips ?? []).flatMap((tip) => (tip.image ? [tip.image] : [])),
     ];
-  }
-
-  private tipsScreen(): { kind: 'tips'; tips: TipView[] } {
-    return { kind: 'tips', tips: this.setup.tips ?? [] };
   }
 
   private get step(): Step {
     return this.steps[this.screenIndex]!;
   }
 
-  private get currentRound(): WriteVoteRound | null {
+  /** The step on screen when it belongs to a round, for what every game shares. */
+  private get roundStep(): RoundStep | null {
     const { step } = this;
-    return step.kind === 'round' ? this.rounds[step.roundIndex]! : null;
+    return 'round' in step ? step : null;
   }
 
-  private get currentPinRound(): PinRound | null {
-    const { step } = this;
-    return step.kind === 'pin' ? this.pinRounds[step.roundIndex]! : null;
-  }
-
-  private get currentChoiceRound(): ChoiceRound | null {
-    const { step } = this;
-    return step.kind === 'choice' ? this.choiceRounds[step.roundIndex]! : null;
-  }
-
-  /** Whichever round is on, for what every game shares. */
-  private get activeRound(): WriteVoteRound | PinRound | ChoiceRound | null {
-    return this.currentRound ?? this.currentPinRound ?? this.currentChoiceRound;
+  /** Each round once, in the order they're played. Every round has exactly one reveal. */
+  private roundsOf<T extends AnyRound>(type: new (...args: any[]) => T): T[] {
+    return this.steps.flatMap((step) =>
+      'round' in step && step.stage === 'reveal' && step.round instanceof type ? [step.round] : [],
+    );
   }
 
   /** The country tonight's map game is in, if there is one. */
   private get mapArea(): Country | null {
-    if (this.pinRounds.length === 0) return null;
-    return findCountry(this.setup.country ?? DEFAULT_COUNTRY) ?? findCountry(DEFAULT_COUNTRY)!;
+    return this.steps.some((step) => step.kind === 'pin') ? mapAreaOf(this.setup) : null;
   }
 
   get screenId(): number {
@@ -521,7 +449,7 @@ export class Room {
 
   get joinState(): JoinState {
     if (this.joinLocked) return 'locked';
-    return this.players.size >= this.capacity ? 'full' : 'open';
+    return this.players.size >= MAX_PLAYERS ? 'full' : 'open';
   }
 
   get hasPendingRequests(): boolean {
@@ -554,7 +482,7 @@ export class Room {
     if (known.kind === 'pending') return { kind: 'pending', created: false };
 
     const name = cleanName(rawName);
-    const problem = nameProblem(name);
+    const problem = textProblem(name);
     if (problem === 'empty') return { kind: 'refused', code: 'name_empty' };
     if (problem === 'too_long') return { kind: 'refused', code: 'name_too_long' };
     if (hitsBlocklist(name, this.blocklist)) return { kind: 'refused', code: 'name_blocked' };
@@ -567,7 +495,7 @@ export class Room {
     }
 
     if (this.joinLocked) return { kind: 'refused', code: 'join_locked' };
-    if (this.players.size >= this.capacity) return { kind: 'refused', code: 'room_full' };
+    if (this.players.size >= MAX_PLAYERS) return { kind: 'refused', code: 'room_full' };
 
     const player: Player = {
       id: randomId(9),
@@ -589,20 +517,29 @@ export class Room {
   private requestRejoin(player: Player, tokenHash: string, now: number): JoinOutcome {
     this.rejoinBucket ??= new TokenBucket(MAX_PENDING_REJOINS, 1 / REJOIN_SPACING_SECONDS, now);
     if (!this.rejoinBucket.take(now)) return { kind: 'refused', code: 'rejoin_busy' };
-    const closed: ClosedRequest[] = [];
-    const close = (request: RejoinRequest) => {
-      this.requests.delete(request.id);
-      closed.push({ tokenHash: request.tokenHash, result: 'expired' });
-    };
     // A newer request for the same player replaces the older one, and once the TV holds as many
     // as it shows, the oldest makes way. Either way, a stranger who asks first can't keep the
     // real player's new phone from asking.
-    for (const request of [...this.requests.values()]) if (request.playerId === player.id) close(request);
-    while (this.requests.size >= MAX_PENDING_REJOINS) close(this.requests.values().next().value!);
+    const closed = this.closeRequests((request) => request.playerId === player.id, 'expired');
+    while (this.requests.size >= MAX_PENDING_REJOINS) {
+      const oldest = this.requests.values().next().value!;
+      closed.push(...this.closeRequests((request) => request === oldest, 'expired'));
+    }
     const id = randomId(9);
     this.requests.set(id, { id, playerId: player.id, tokenHash, expiresAt: now + REJOIN_REQUEST_TTL_MS });
     this.touch(now);
     return closed.length > 0 ? { kind: 'pending', created: true, closed } : { kind: 'pending', created: true };
+  }
+
+  /** Drops every request that matches, and says what became of each. */
+  private closeRequests(matches: (request: RejoinRequest) => boolean, result: RejoinResult): ClosedRequest[] {
+    const closed: ClosedRequest[] = [];
+    for (const request of this.requests.values()) {
+      if (!matches(request)) continue;
+      this.requests.delete(request.id);
+      closed.push({ tokenHash: request.tokenHash, result });
+    }
+    return closed;
   }
 
   /** Returns any request that this reconnection cancels: the real owner came back. */
@@ -611,13 +548,7 @@ export class Room {
     if (!player) return [];
     player.connections += 1;
     player.offlineSince = null;
-    const closed: ClosedRequest[] = [];
-    for (const request of this.requests.values()) {
-      if (request.playerId === playerId) {
-        this.requests.delete(request.id);
-        closed.push({ tokenHash: request.tokenHash, result: 'cancelled' });
-      }
-    }
+    const closed = this.closeRequests((request) => request.playerId === playerId, 'cancelled');
     this.touch(now);
     return closed;
   }
@@ -633,29 +564,33 @@ export class Room {
   // ---------- Moving through the night ----------
 
   private isTimedStage(step: Step = this.step): boolean {
-    if (step.kind === 'pin') return step.stage === 'guess';
-    if (step.kind === 'choice') return step.stage === 'pick';
-    return step.kind === 'round' && (step.stage === 'write' || step.stage === 'vote');
+    return 'stage' in step && TIMED_STAGES.has(step.stage);
   }
 
-  private get isShowing(): boolean {
+  /** The round whose answers are being shown one at a time, if that's what's on. */
+  private get showing(): WriteVoteRound | null {
     const { step } = this;
-    return step.kind === 'round' && step.stage === 'show';
+    return step.kind === 'round' && step.stage === 'show' ? step.round : null;
   }
 
-  next(screenId: number, now: number): NextOutcome {
+  /** How long a timed stage runs. */
+  private stageMs(step: RoundStep): number {
+    if (step.kind === 'pin') return step.round.config.guessMs;
+    if (step.kind === 'choice') return step.round.config.answerMs;
+    return step.stage === 'write' ? step.round.config.writeMs : step.round.voteMs();
+  }
+
+  next(screenId: number, now: number): CommandReply {
     if (screenId !== this.screenIndex) return { ok: false, code: 'stale_screen' };
     if (this.isTimedStage()) return { ok: false, code: 'stage_running' };
     const { step } = this;
-    if (this.isShowing) {
+    if (this.showing) {
       this.nextCaption(now);
       this.touch(now);
       return { ok: true };
     }
     // While rows are still arriving, a press shows them all. Once they're all up, it moves on.
-    const revealing =
-      ((step.kind === 'round' || step.kind === 'pin' || step.kind === 'choice') && step.stage === 'reveal') ||
-      step.kind === 'final';
+    const revealing = this.roundStep?.stage === 'reveal' || step.kind === 'final';
     if (revealing && now < this.revealLastRowAt) {
       if (step.kind === 'final') this.podiumShown = true;
       this.revealLastRowAt = now;
@@ -683,48 +618,25 @@ export class Room {
       this.revealEndsAt = this.revealLastRowAt;
       return;
     }
-    if (step.kind === 'pin') {
-      const pinRound = this.pinRounds[step.roundIndex]!;
-      if (step.stage === 'guess') this.startTimer(pinRound.config.guessMs, now);
-      else this.startPinReveal(pinRound, now);
-      return;
-    }
-    if (step.kind === 'choice') {
-      const choiceRound = this.choiceRounds[step.roundIndex]!;
-      if (step.stage === 'pick') this.startTimer(choiceRound.config.answerMs, now);
-      else this.startChoiceReveal(choiceRound, now);
-      return;
-    }
-    if (step.kind !== 'round') return;
-    const round = this.rounds[step.roundIndex]!;
-    if (step.stage === 'write') {
-      this.startTimer(round.config.writeMs, now);
-    } else if (step.stage === 'show') {
-      round.startVote();
-      // With nothing to compare, the next stage carries it on to the reveal.
-      if (!round.hasContest) {
-        this.enterStep(index + 1, now);
-        return;
+    if (!('round' in step)) return;
+    if (step.stage === 'reveal') return this.startReveal(step.round, now);
+    if (step.kind === 'round' && step.stage !== 'write') {
+      step.round.startVote();
+      // With nothing to compare, the next stage carries it on to the reveal, so an empty round
+      // still finishes cleanly.
+      if (!step.round.hasContest) return this.enterStep(index + 1, now);
+      if (step.stage === 'show') {
+        this.showOrder = step.round.allEntries().map((entry) => entry.id);
+        this.showIndex = -1;
+        return this.nextCaption(now);
       }
-      this.showOrder = round.allEntries().map((entry) => entry.id);
-      this.showIndex = -1;
-      this.nextCaption(now);
-    } else if (step.stage === 'vote') {
-      round.startVote();
-      // Nothing to choose between, so an empty round still finishes cleanly.
-      if (!round.hasContest) {
-        this.enterStep(index + 1, now);
-        return;
-      }
-      this.startTimer(round.voteMs(), now);
-    } else {
-      this.startReveal(round, now);
     }
+    this.startTimer(this.stageMs(step), now);
   }
 
   /** On to the next answer still in the game. After the last one, everything opens for the vote. */
   private nextCaption(now: number): void {
-    const round = this.currentRound!;
+    const round = this.showing!;
     const live = round.allEntries();
     for (let index = this.showIndex + 1; index < this.showOrder.length; index += 1) {
       const entry = live.find((candidate) => candidate.id === this.showOrder[index]);
@@ -739,46 +651,22 @@ export class Room {
 
   /** The answer on screen was hidden or its author removed, so it moves straight on. */
   private leaveRemovedCaption(now: number): void {
-    if (!this.isShowing) return;
+    const round = this.showing;
+    if (!round) return;
     const current = this.showOrder[this.showIndex];
-    if (!this.currentRound!.allEntries().some((entry) => entry.id === current)) this.nextCaption(now);
+    if (!round.allEntries().some((entry) => entry.id === current)) this.nextCaption(now);
   }
 
-  private startReveal(round: WriteVoteRound, now: number): void {
+  private startReveal(round: AnyRound, now: number): void {
     if (!round.resolved) {
       for (const [playerId, result] of round.resolve()) {
         const player = this.players.get(playerId);
         if (player) player.score += result.points;
       }
     }
-    const times = revealRowTimes(round.revealRows(() => null));
     this.revealStartedAt = now;
-    this.revealLastRowAt = now + (times.at(-1) ?? 0);
+    this.revealLastRowAt = now + round.revealMs();
     // Phones wait a moment longer, so the last row lands on the TV before results appear.
-    this.revealEndsAt = this.revealLastRowAt + REVEAL_PAUSE_MS;
-  }
-
-  private startPinReveal(round: PinRound, now: number): void {
-    if (!round.resolved) {
-      for (const [playerId, result] of round.resolve()) {
-        const player = this.players.get(playerId);
-        if (player) player.score += result.points;
-      }
-    }
-    this.revealStartedAt = now;
-    this.revealLastRowAt = now + pinRevealMs(round.pinnedIds().length);
-    this.revealEndsAt = this.revealLastRowAt + REVEAL_PAUSE_MS;
-  }
-
-  private startChoiceReveal(round: ChoiceRound, now: number): void {
-    if (!round.resolved) {
-      for (const [playerId, result] of round.resolve()) {
-        const player = this.players.get(playerId);
-        if (player) player.score += result.points;
-      }
-    }
-    this.revealStartedAt = now;
-    this.revealLastRowAt = now + CHOICE_REVEAL.namesAtMs;
     this.revealEndsAt = this.revealLastRowAt + REVEAL_PAUSE_MS;
   }
 
@@ -786,18 +674,13 @@ export class Room {
     this.timer = { endsAt: now + totalMs, totalMs, pausedRemainingMs: null, stretchDone: false, cutShort: false };
   }
 
-  skipTimer(screenId: number, now: number): TimerOutcome {
+  skipTimer(screenId: number, now: number): CommandReply {
     if (screenId !== this.screenIndex) return { ok: false, code: 'stale_screen' };
     const { timer } = this;
     if (!timer) return { ok: false, code: 'no_timer' };
     // Nothing is being sent while answers are shown, so this goes straight to the vote.
-    if (this.isShowing) {
-      this.enterStep(this.screenIndex + 1, now);
-      this.touch(now);
-      return { ok: true };
-    }
     const alreadyEnded = timer.pausedRemainingMs === null && now >= timer.endsAt;
-    if (alreadyEnded || this.nobodyToWaitFor(now)) {
+    if (this.showing || alreadyEnded || this.nobodyToWaitFor(now)) {
       this.enterStep(this.screenIndex + 1, now);
     } else {
       // Time's up, as if the timer had run out. Phones send what's on screen during the grace
@@ -811,7 +694,7 @@ export class Room {
     return { ok: true };
   }
 
-  addTime(screenId: number, now: number): TimerOutcome {
+  addTime(screenId: number, now: number): CommandReply {
     if (screenId !== this.screenIndex) return { ok: false, code: 'stale_screen' };
     const { timer } = this;
     if (!timer) return { ok: false, code: 'no_timer' };
@@ -824,7 +707,7 @@ export class Room {
     return { ok: true };
   }
 
-  setPaused(paused: boolean, now: number): TimerOutcome {
+  setPaused(paused: boolean, now: number): CommandReply {
     const { timer } = this;
     if (!timer) return { ok: false, code: 'no_timer' };
     if (paused === (timer.pausedRemainingMs !== null)) return { ok: true };
@@ -842,7 +725,7 @@ export class Room {
   tick(now: number): TickOutcome {
     const { timer } = this;
     if (!timer || timer.pausedRemainingMs !== null) return 'none';
-    if (this.isShowing) {
+    if (this.showing) {
       if (now < timer.endsAt) return 'none';
       const screen = this.screenIndex;
       this.nextCaption(now);
@@ -871,12 +754,10 @@ export class Room {
   }
 
   private isDone(player: Player): boolean {
-    const { step } = this;
-    if (step.kind === 'pin') return this.pinRounds[step.roundIndex]!.hasPin(player.id);
-    if (step.kind === 'choice') return this.choiceRounds[step.roundIndex]!.hasPick(player.id);
-    if (step.kind !== 'round') return false;
-    const round = this.rounds[step.roundIndex]!;
-    return step.stage === 'write' ? round.doneWriting(player.id) : round.doneVoting(player.id);
+    const step = this.roundStep;
+    if (!step) return false;
+    if (step.kind !== 'round') return step.round.hasGuessed(player.id);
+    return step.stage === 'write' ? step.round.doneWriting(player.id) : step.round.doneVoting(player.id);
   }
 
   private everyoneDone(now: number): boolean {
@@ -896,65 +777,49 @@ export class Room {
 
   // ---------- Guest actions ----------
 
-  submitAnswer(playerId: string, screenId: number, seq: number, text: string, now: number): ActionResult {
-    const { step } = this;
-    if (screenId !== this.screenIndex || step.kind !== 'round' || step.stage !== 'write') {
-      return { ok: false, code: 'too_late' };
-    }
+  /** Runs a guest's action on the round taking input at `stage`, if that's the screen they sent it from. */
+  private guestAction<S extends keyof RoundAt>(
+    playerId: string,
+    screenId: number,
+    stage: S,
+    now: number,
+    action: (round: RoundAt[S], open: boolean) => CommandReply,
+  ): CommandReply {
+    const step = this.roundStep;
+    if (screenId !== this.screenIndex || step?.stage !== stage) return { ok: false, code: 'too_late' };
     if (!this.players.has(playerId)) return { ok: false, code: 'not_found' };
-    const round = this.rounds[step.roundIndex]!;
-    const reply = round.act('write', playerId, seq, () =>
-      this.stillOpen(now) ? round.submitAnswer(playerId, text, now) : { ok: false, code: 'too_late' },
-    );
+    const reply = action(step.round as RoundAt[S], this.stillOpen(now));
     this.touch(now);
     return reply;
   }
 
-  submitVote(playerId: string, screenId: number, seq: number, entryId: string, now: number): ActionResult {
-    const { step } = this;
-    if (screenId !== this.screenIndex || step.kind !== 'round' || step.stage !== 'vote') {
-      return { ok: false, code: 'too_late' };
-    }
-    if (!this.players.has(playerId)) return { ok: false, code: 'not_found' };
-    const round = this.rounds[step.roundIndex]!;
-    const reply = round.act('vote', playerId, seq, () =>
-      this.stillOpen(now) ? round.vote(playerId, entryId) : { ok: false, code: 'too_late' },
+  submitAnswer(playerId: string, screenId: number, seq: number, text: string, now: number): CommandReply {
+    return this.guestAction(playerId, screenId, 'write', now, (round, open) =>
+      round.act('write', playerId, seq, () => (open ? round.submitAnswer(playerId, text, now) : TOO_LATE)),
     );
-    this.touch(now);
-    return reply;
   }
 
-  submitPin(playerId: string, screenId: number, seq: number, lat: number, lng: number, now: number): ActionResult {
-    const { step } = this;
-    if (screenId !== this.screenIndex || step.kind !== 'pin' || step.stage !== 'guess') {
-      return { ok: false, code: 'too_late' };
-    }
-    if (!this.players.has(playerId)) return { ok: false, code: 'not_found' };
-    const round = this.pinRounds[step.roundIndex]!;
-    const reply = round.act(playerId, seq, () =>
-      this.stillOpen(now) ? round.place(playerId, lat, lng) : { ok: false, code: 'too_late' },
+  submitVote(playerId: string, screenId: number, seq: number, entryId: string, now: number): CommandReply {
+    return this.guestAction(playerId, screenId, 'vote', now, (round, open) =>
+      round.act('vote', playerId, seq, () => (open ? round.vote(playerId, entryId) : TOO_LATE)),
     );
-    this.touch(now);
-    return reply;
   }
 
-  submitPick(playerId: string, screenId: number, seq: number, option: number, now: number): ActionResult {
-    const { step } = this;
-    if (screenId !== this.screenIndex || step.kind !== 'choice' || step.stage !== 'pick') {
-      return { ok: false, code: 'too_late' };
-    }
-    if (!this.players.has(playerId)) return { ok: false, code: 'not_found' };
-    const round = this.choiceRounds[step.roundIndex]!;
-    const reply = round.act(playerId, seq, () =>
-      this.stillOpen(now) ? round.pick(playerId, option) : { ok: false, code: 'too_late' },
+  submitPin(playerId: string, screenId: number, seq: number, lat: number, lng: number, now: number): CommandReply {
+    return this.guestAction(playerId, screenId, 'guess', now, (round, open) =>
+      round.act(playerId, seq, () => (open ? round.place(playerId, lat, lng) : TOO_LATE)),
     );
-    this.touch(now);
-    return reply;
+  }
+
+  submitPick(playerId: string, screenId: number, seq: number, option: number, now: number): CommandReply {
+    return this.guestAction(playerId, screenId, 'pick', now, (round, open) =>
+      round.act(playerId, seq, () => (open ? round.pick(playerId, option) : TOO_LATE)),
+    );
   }
 
   /** Only for teasing, because a phone can fake it and locking a phone can trigger it. */
   markLeftPage(playerId: string, now: number): boolean {
-    const round = this.activeRound;
+    const round = this.roundStep?.round;
     if (!round || !this.isTimedStage() || !this.players.has(playerId) || round.hasLeftPage(playerId)) return false;
     round.markLeftPage(playerId);
     this.touch(now);
@@ -969,10 +834,10 @@ export class Room {
     this.touch(now);
   }
 
-  hideEntry(entryId: string, now: number): ActionResult {
+  hideEntry(entryId: string, now: number): CommandReply {
     const { step } = this;
     if (step.kind !== 'round' || step.stage === 'write') return { ok: false, code: 'not_found' };
-    const reply = this.rounds[step.roundIndex]!.hide(entryId);
+    const reply = step.round.hide(entryId);
     if (reply.ok) {
       this.leaveRemovedCaption(now);
       this.touch(now);
@@ -980,7 +845,7 @@ export class Room {
     return reply;
   }
 
-  /** Frees the slot and blocks that phone's token. Returns the removed player's id. */
+  /** Frees the slot and blocks that phone's token. */
   remove(playerId: string, now: number): { tokenHash: string; closed: ClosedRequest[] } | null {
     const player = this.players.get(playerId);
     if (!player) return null;
@@ -988,32 +853,22 @@ export class Room {
     this.playerByToken.delete(player.tokenHash);
     this.playerByKey.delete(player.key);
     this.revoked.set(player.tokenHash, 'removed');
-    this.activeRound?.removePlayer(playerId);
+    this.roundStep?.round.removePlayer(playerId);
     this.leaveRemovedCaption(now);
-    const closed: ClosedRequest[] = [];
-    for (const request of this.requests.values()) {
-      if (request.playerId === playerId) {
-        this.requests.delete(request.id);
-        closed.push({ tokenHash: request.tokenHash, result: 'denied' });
-      }
-    }
+    const closed = this.closeRequests((request) => request.playerId === playerId, 'denied');
     this.touch(now);
     return { tokenHash: player.tokenHash, closed };
   }
 
   /** Approving cancels the old phone's token, so only the new phone holds this player. */
-  answerRejoin(
-    requestId: string,
-    approve: boolean,
-    now: number,
-  ): { requesterHash: string; playerId: string; oldHash: string | null } | null {
+  answerRejoin(requestId: string, approve: boolean, now: number): { requesterHash: string; oldHash: string | null } | null {
     const request = this.requests.get(requestId);
     if (!request) return null;
     this.requests.delete(requestId);
     const player = this.players.get(request.playerId);
     if (!approve || !player) {
       this.touch(now);
-      return { requesterHash: request.tokenHash, playerId: request.playerId, oldHash: null };
+      return { requesterHash: request.tokenHash, oldHash: null };
     }
     const oldHash = player.tokenHash;
     this.playerByToken.delete(oldHash);
@@ -1021,17 +876,11 @@ export class Room {
     player.tokenHash = request.tokenHash;
     this.playerByToken.set(request.tokenHash, player.id);
     this.touch(now);
-    return { requesterHash: request.tokenHash, playerId: player.id, oldHash };
+    return { requesterHash: request.tokenHash, oldHash };
   }
 
   expireRequests(now: number): ClosedRequest[] {
-    const closed: ClosedRequest[] = [];
-    for (const request of this.requests.values()) {
-      if (request.expiresAt <= now) {
-        this.requests.delete(request.id);
-        closed.push({ tokenHash: request.tokenHash, result: 'expired' });
-      }
-    }
+    const closed = this.closeRequests((request) => request.expiresAt <= now, 'expired');
     if (closed.length > 0) this.touch(now);
     return closed;
   }
@@ -1041,25 +890,11 @@ export class Room {
   /** Ties share a rank, then the next rank skips: 1, 2, 2, 4. */
   private standings(gameNumber: number | null): StandingRow[] {
     const earnedThisGame = new Map<string, number>();
-    if (gameNumber !== null) {
-      this.rounds.forEach((round, index) => {
-        if (this.gameOfRound[index] !== gameNumber) return;
-        for (const [playerId, result] of round.allResults()) {
-          earnedThisGame.set(playerId, (earnedThisGame.get(playerId) ?? 0) + result.points);
-        }
-      });
-      this.pinRounds.forEach((round, index) => {
-        if (this.gameOfPin[index] !== gameNumber) return;
-        for (const [playerId, result] of round.allResults()) {
-          earnedThisGame.set(playerId, (earnedThisGame.get(playerId) ?? 0) + result.points);
-        }
-      });
-      this.choiceRounds.forEach((round, index) => {
-        if (this.gameOfChoice[index] !== gameNumber) return;
-        for (const [playerId, result] of round.allResults()) {
-          earnedThisGame.set(playerId, (earnedThisGame.get(playerId) ?? 0) + result.points);
-        }
-      });
+    for (const step of this.steps) {
+      if (!('round' in step) || step.stage !== 'reveal' || step.info.gameNumber !== gameNumber) continue;
+      for (const [playerId, result] of step.round.allResults()) {
+        earnedThisGame.set(playerId, (earnedThisGame.get(playerId) ?? 0) + result.points);
+      }
     }
     const sorted = [...this.players.values()].sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt);
     let rank = 0;
@@ -1106,13 +941,8 @@ export class Room {
   // ---------- Views ----------
 
   private timerView(): TimerView {
-    const timer = this.timer!;
-    return {
-      endsAt: timer.endsAt,
-      totalMs: timer.totalMs,
-      pausedRemainingMs: timer.pausedRemainingMs,
-      cutShort: timer.cutShort,
-    };
+    const { endsAt, totalMs, pausedRemainingMs, cutShort } = this.timer!;
+    return { endsAt, totalMs, pausedRemainingMs, cutShort };
   }
 
   private hostScreen(): HostScreen {
@@ -1122,7 +952,7 @@ export class Room {
       case 'title':
         return step;
       case 'tips':
-        return this.tipsScreen();
+        return { kind: 'tips', tips: this.setup.tips ?? [] };
       case 'final': {
         const { podium, rows } = this.finalLayout();
         return {
@@ -1146,13 +976,13 @@ export class Room {
       case 'gallery':
         return { kind: 'gallery', round: step.info, images: step.images, place: step.place };
       case 'pin': {
-        const round = this.pinRounds[step.roundIndex]!;
+        const { round } = step;
         if (step.stage === 'guess') {
           return {
             kind: 'guess',
             round: step.info,
             timer: this.timerView(),
-            doneIds: round.pinnedIds().filter((id) => this.players.has(id)),
+            doneIds: this.present(round.guessedIds()),
           };
         }
         const { lat, lng, label } = round.config.place;
@@ -1166,41 +996,38 @@ export class Room {
         };
       }
       case 'choice': {
-        const round = this.choiceRounds[step.roundIndex]!;
+        const { round } = step;
         if (step.stage === 'pick') {
           return {
             kind: 'pick',
             round: step.info,
             timer: this.timerView(),
             options: round.config.options,
-            doneIds: round.pickedIds().filter((id) => this.players.has(id)),
+            doneIds: this.present(round.guessedIds()),
           };
         }
-        const present = (id: string) => this.players.has(id);
         return {
           kind: 'pickReveal',
           round: step.info,
-          rows: round.revealRows(present),
+          rows: round.revealRows((id) => this.players.has(id)),
           right: [...this.players.values()]
             .filter((player) => round.resultOf(player.id)?.correct)
             .map((player) => player.name),
-          answered: round.pickedIds().filter(present).length,
+          answered: this.present(round.guessedIds()).length,
           startedAt: this.revealStartedAt,
           endsAt: this.revealEndsAt,
         };
       }
       case 'round': {
-        const round = this.rounds[step.roundIndex]!;
-        const { info: roundInfo } = step;
-        const present = (ids: string[]) => ids.filter((id) => this.players.has(id));
+        const { round, info } = step;
         if (step.stage === 'write') {
-          return { kind: 'write', round: roundInfo, timer: this.timerView(), doneIds: present(round.writerIds()) };
+          return { kind: 'write', round: info, timer: this.timerView(), doneIds: this.present(round.writerIds()) };
         }
         if (step.stage === 'show') {
           const live = round.allEntries();
           return {
             kind: 'show',
-            round: roundInfo,
+            round: info,
             timer: this.timerView(),
             entry: live.find((entry) => entry.id === this.showOrder[this.showIndex])!,
             ...this.showPosition(live),
@@ -1209,21 +1036,26 @@ export class Room {
         if (step.stage === 'vote') {
           return {
             kind: 'vote',
-            round: roundInfo,
+            round: info,
             timer: this.timerView(),
             entries: round.allEntries(),
-            doneIds: present(round.voterIds()),
+            doneIds: this.present(round.voterIds()),
           };
         }
         return {
           kind: 'reveal',
-          round: roundInfo,
+          round: info,
           rows: round.revealRows((id) => this.players.get(id)?.name ?? null),
           startedAt: this.revealStartedAt,
           endsAt: this.revealEndsAt,
         };
       }
     }
+  }
+
+  /** Only the ids of guests still in the game. */
+  private present(ids: string[]): string[] {
+    return ids.filter((id) => this.players.has(id));
   }
 
   /** Counts only answers still in the game, so a hidden one doesn't leave a gap in the numbering. */
@@ -1237,7 +1069,7 @@ export class Room {
 
   hostView(): HostView {
     const { step } = this;
-    const round = this.activeRound;
+    const round = this.roundStep?.round;
     const showLeftPage = this.setup.showLeftPage !== false;
     return {
       role: 'host',
@@ -1252,7 +1084,7 @@ export class Room {
         this.screenIndex < this.steps.length - 1 &&
         !(step.kind === 'lobby' && this.players.size === 0),
       joinLocked: this.joinLocked,
-      capacity: this.capacity,
+      capacity: MAX_PLAYERS,
       mapArea: this.mapArea,
       players: [...this.players.values()].map((player) => ({
         id: player.id,
@@ -1269,12 +1101,13 @@ export class Room {
 
   private guestScreen(player: Player): GuestScreen {
     const { step } = this;
+    const standing = () => ({ total: player.score, rank: this.rankOf(player.id) });
     switch (step.kind) {
       case 'lobby':
       case 'title':
         return step;
       case 'tips':
-        return this.tipsScreen();
+        return { kind: 'tips', tips: this.setup.tips ?? [] };
       case 'final':
         return {
           kind: 'final',
@@ -1295,13 +1128,13 @@ export class Room {
       case 'gallery':
         return { kind: 'gallery', round: step.info, count: step.images.length };
       case 'pin': {
-        const round = this.pinRounds[step.roundIndex]!;
+        const { round } = step;
         if (step.stage === 'guess') {
           return {
             kind: 'guess',
             round: step.info,
             timer: this.timerView(),
-            pin: round.pinOf(player.id),
+            pin: round.guessOf(player.id),
             lastSeq: round.lastSeq(player.id),
           };
         }
@@ -1311,23 +1144,18 @@ export class Room {
           round: step.info,
           endsAt: this.revealEndsAt,
           place: round.config.place.label,
-          result: {
-            km: result?.km ?? null,
-            points: result?.points ?? 0,
-            total: player.score,
-            rank: this.rankOf(player.id),
-          },
+          result: { km: result?.km ?? null, points: result?.points ?? 0, ...standing() },
         };
       }
       case 'choice': {
-        const round = this.choiceRounds[step.roundIndex]!;
+        const { round } = step;
         if (step.stage === 'pick') {
           return {
             kind: 'pick',
             round: step.info,
             timer: this.timerView(),
             options: round.config.options,
-            pick: round.pickOf(player.id),
+            pick: round.guessOf(player.id),
             lastSeq: round.lastSeq(player.id),
           };
         }
@@ -1341,13 +1169,12 @@ export class Room {
             picked: result !== null,
             correct: result?.correct ?? false,
             points: result?.points ?? 0,
-            total: player.score,
-            rank: this.rankOf(player.id),
+            ...standing(),
           },
         };
       }
       case 'round': {
-        const round = this.rounds[step.roundIndex]!;
+        const { round } = step;
         if (step.stage === 'write') {
           return {
             kind: 'write',
@@ -1383,8 +1210,7 @@ export class Room {
             votes: result.votes,
             top: round.isTop(player.id),
             points: result.points,
-            total: player.score,
-            rank: this.rankOf(player.id),
+            ...standing(),
           },
         };
       }
@@ -1403,7 +1229,7 @@ export class Room {
       screenId: this.screenIndex,
       you: { name: player.name },
       playerCount: this.players.size,
-      capacity: this.capacity,
+      capacity: MAX_PLAYERS,
       mapArea: this.mapArea,
     };
   }
@@ -1423,9 +1249,9 @@ export class Room {
       updatedAt: this.updatedAt,
       players: [...this.players.values()].map(({ connections: _connections, offlineSince: _offline, ...player }) => player),
       revoked: [...this.revoked.entries()],
-      rounds: this.rounds.map((round) => round.toState()),
-      pinRounds: this.pinRounds.map((round) => round.toState()),
-      choiceRounds: this.choiceRounds.map((round) => round.toState()),
+      rounds: this.roundsOf(WriteVoteRound).map((round) => round.toState()),
+      pinRounds: this.roundsOf(PinRound).map((round) => round.toState()),
+      choiceRounds: this.roundsOf(ChoiceRound).map((round) => round.toState()),
     };
   }
 
@@ -1437,30 +1263,15 @@ export class Room {
     const parsed = snapshotSchema.safeParse(value);
     if (!parsed.success) return null;
     const data = parsed.data;
-    const room = new Room(data.id, data.setup, data.createdAt);
-    const choiceRounds = data.choiceRounds ?? [];
-    if (
-      data.screenIndex >= room.steps.length ||
-      data.rounds.length !== room.rounds.length ||
-      data.pinRounds.length !== room.pinRounds.length ||
-      choiceRounds.length !== room.choiceRounds.length
-    ) {
+    const rounds = parseAll(data.rounds, WriteVoteRound.parseState);
+    const pinRounds = parseAll(data.pinRounds, PinRound.parseState);
+    const choiceRounds = parseAll(data.choiceRounds ?? [], ChoiceRound.parseState);
+    if (!rounds || !pinRounds || !choiceRounds) return null;
+    const counts = [rounds.length, pinRounds.length, choiceRounds.length];
+    const room = new Room(data.id, data.setup, data.createdAt, { rounds, pinRounds, choiceRounds });
+    const built = [room.roundsOf(WriteVoteRound), room.roundsOf(PinRound), room.roundsOf(ChoiceRound)];
+    if (data.screenIndex >= room.steps.length || built.some((list, index) => list.length !== counts[index])) {
       return null;
-    }
-    for (let index = 0; index < data.rounds.length; index += 1) {
-      const state = WriteVoteRound.parseState(data.rounds[index]);
-      if (!state) return null;
-      room.rounds[index] = new WriteVoteRound(room.rounds[index]!.config, state);
-    }
-    for (let index = 0; index < data.pinRounds.length; index += 1) {
-      const state = PinRound.parseState(data.pinRounds[index]);
-      if (!state) return null;
-      room.pinRounds[index] = new PinRound(room.pinRounds[index]!.config, state);
-    }
-    for (let index = 0; index < choiceRounds.length; index += 1) {
-      const state = ChoiceRound.parseState(choiceRounds[index]);
-      if (!state) return null;
-      room.choiceRounds[index] = new ChoiceRound(room.choiceRounds[index]!.config, state);
     }
     room.screenIndex = data.screenIndex;
     room.joinLocked = data.joinLocked;
@@ -1473,41 +1284,18 @@ export class Room {
     }
     for (const [hash, reason] of data.revoked) room.revoked.set(hash, reason);
 
+    // A reveal or the podium comes back fully shown. A timed stage gets its full time again.
     const { step } = room;
-    if (step.kind === 'final') {
+    const roundStep = room.roundStep;
+    if (step.kind === 'final' || roundStep?.stage === 'reveal') {
       room.revealStartedAt = now;
       room.revealLastRowAt = now;
       room.revealEndsAt = now;
-      room.podiumShown = true;
-    }
-    if (step.kind === 'pin') {
-      if (step.stage === 'guess') {
-        room.startTimer(room.pinRounds[step.roundIndex]!.config.guessMs, now);
-      } else {
-        room.revealStartedAt = now;
-        room.revealLastRowAt = now;
-        room.revealEndsAt = now;
-      }
-    }
-    if (step.kind === 'choice') {
-      if (step.stage === 'pick') {
-        room.startTimer(room.choiceRounds[step.roundIndex]!.config.answerMs, now);
-      } else {
-        room.revealStartedAt = now;
-        room.revealLastRowAt = now;
-        room.revealEndsAt = now;
-      }
-    }
-    if (step.kind === 'round') {
-      const round = room.rounds[step.roundIndex]!;
-      if (step.stage === 'write') room.startTimer(round.config.writeMs, now);
-      else if (step.stage === 'show') room.enterStep(room.screenIndex, now);
-      else if (step.stage === 'vote') room.startTimer(round.voteMs(), now);
-      else {
-        room.revealStartedAt = now;
-        room.revealLastRowAt = now;
-        room.revealEndsAt = now;
-      }
+      room.podiumShown = step.kind === 'final';
+    } else if (room.showing) {
+      room.enterStep(room.screenIndex, now);
+    } else if (roundStep && room.isTimedStage()) {
+      room.startTimer(room.stageMs(roundStep), now);
     }
     return room;
   }

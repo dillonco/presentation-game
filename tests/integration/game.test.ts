@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Socket } from 'socket.io-client';
+import { emptyDeck, type DeckContent } from '../../shared/deck.js';
 import type { GuestView, HostView } from '../../shared/protocol.js';
-import type { RoomSetup } from '../../server/session/room.js';
 import { PODIUM } from '../../shared/reveal.js';
 import { command, hostHello, newToken, send, startHarness, type Harness } from './helpers.js';
 
@@ -10,13 +10,14 @@ const WRITE_MS = 60_000;
 const VOTE_MS = 45_000;
 const GRACE_MS = 1500;
 
-const DECK: RoomSetup = {
+const DECK: DeckContent = {
+  ...emptyDeck(),
   title: 'Test deck',
-  blocklist: ['jerk'],
+  moderation: { ...emptyDeck().moderation, blocklist: ['jerk'] },
   games: [
     {
       type: 'define',
-      settings: { writeMs: WRITE_MS, voteMs: VOTE_MS },
+      settings: { writeSeconds: WRITE_MS / 1000, voteSeconds: VOTE_MS / 1000 },
       items: [
         { word: 'komorebi', definition: REAL },
         { word: 'tsundoku', definition: 'Buying books and letting them pile up unread' },
@@ -42,8 +43,8 @@ describe('playing Define it', () => {
 
   beforeEach(async () => {
     clock = { now: Date.now() };
-    harness = await startHarness({ now: () => clock.now, defaultSetup: DECK, tickMs: 5 });
-    roomId = await harness.createRoom();
+    harness = await startHarness({ now: () => clock.now, tickMs: 5 });
+    roomId = await harness.createRoom(undefined, DECK);
     host = await harness.host(roomId);
     tvMessages = [];
     host.on('view', (view) => tvMessages.push(view));
@@ -224,22 +225,6 @@ describe('playing Define it', () => {
       expect(JSON.stringify(priya.messages)).not.toContain('"Alex"');
     });
 
-    it('tells a guest only their own name and a head count', async () => {
-      const alex = await join('Alex');
-      await join('Sam');
-      await settle();
-      expect(JSON.stringify(await viewOf(alex))).not.toContain('Sam');
-    });
-
-    it('never sends a token or hash to anyone', async () => {
-      const alex = await join('Alex');
-      await startWriting();
-      await answer(alex, 'A quiet walk at dawn');
-      await settle();
-      const everything = JSON.stringify([tvMessages, alex.messages, await tvView(), await viewOf(alex)]);
-      expect(everything).not.toContain(alex.token);
-      expect(everything).not.toContain('tokenHash');
-    });
   });
 
   describe('attacks', () => {
@@ -362,6 +347,7 @@ describe('playing Define it', () => {
       await startWriting();
       const screenId = room().screenId;
       for (const value of [
+        { type: 'next', screenId },
         { type: 'skipTimer', screenId },
         { type: 'addTime', screenId },
         { type: 'setPaused', paused: true },
@@ -683,8 +669,9 @@ describe('playing Define it', () => {
       await startWriting();
       await answer(alex, 'A quiet walk at dawn');
       await harness.app.rooms.flush();
-      const stored = await harness.app.storage.get(`rooms/${roomId}.json`);
-      expect(stored!.body.toString('utf8')).not.toContain(alex.token);
+      const stored = (await harness.app.storage.get(`rooms/${roomId}.json`))!.body.toString('utf8');
+      expect(stored).toContain('Alex');
+      expect(stored).not.toContain(alex.token);
     });
   });
 

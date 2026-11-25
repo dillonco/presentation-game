@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, hitsBlocklist, nameKey, nameProblem } from '../../shared/names.js';
+import { cleanName, hitsBlocklist, nameKey, textProblem } from '../../shared/names.js';
 
 describe('line breaks', () => {
   it.each([
@@ -35,18 +35,18 @@ describe('cleanName', () => {
   });
 });
 
-describe('nameProblem', () => {
+describe('textProblem', () => {
   it.each(['', '   ', '​​', '...', 'ㅤ', '---'])('refuses %j as empty', (raw) => {
-    expect(nameProblem(cleanName(raw))).toBe('empty');
+    expect(textProblem(cleanName(raw))).toBe('empty');
   });
 
   it.each(['Al', '健太', 'Владимир', '🎌', '7'])('accepts %j', (raw) => {
-    expect(nameProblem(cleanName(raw))).toBeNull();
+    expect(textProblem(cleanName(raw))).toBeNull();
   });
 
   it('counts characters rather than UTF-16 units', () => {
-    expect(nameProblem('🎌'.repeat(16))).toBeNull();
-    expect(nameProblem('🎌'.repeat(17))).toBe('too_long');
+    expect(textProblem('🎌'.repeat(16))).toBeNull();
+    expect(textProblem('🎌'.repeat(17))).toBe('too_long');
   });
 });
 

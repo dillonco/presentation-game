@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { accentIsReadable, HEX_COLOUR } from './color.js';
 import { MAX_ANSWER_LENGTH } from './constants.js';
 import { findCountry, insideCountry } from './countries.js';
-import { cleanName, answerProblem, nameKey } from './names.js';
+import { cleanName, nameKey, textProblem } from './names.js';
 import { MAX_CLIP_SECONDS, MAX_CLIP_TIME, parseYouTubeLink, type WordClip } from './youtube.js';
 
 /**
@@ -14,9 +14,8 @@ import { MAX_CLIP_SECONDS, MAX_CLIP_TIME, parseYouTubeLink, type WordClip } from
  */
 
 export const DECK_ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
-export const IMAGE_ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 /** A video's id is a photo-style id with a `v` in front, so everything that passes ids around works unchanged. */
-export const VIDEO_ID_PATTERN = /^v[A-Za-z0-9_-]{22}$/;
+const VIDEO_ID_PATTERN = /^v[A-Za-z0-9_-]{22}$/;
 /** Either kind. Each item in a deck can be a photo or a video. */
 export const MEDIA_ID_PATTERN = /^v?[A-Za-z0-9_-]{22}$/;
 
@@ -34,7 +33,7 @@ export const MAX_PLACE_LABEL = 60;
 /** Pick one: the question beside the photo, and each of its four answers. */
 export const MAX_QUESTION = 100;
 export const MAX_CHOICE = 60;
-export const CHOICE_COUNT = 4;
+const CHOICE_COUNT = 4;
 export const MAX_ITEMS_PER_GAME = 30;
 /** More photos from the same moment, shown on the TV once a photo's round is over. */
 export const MAX_EXTRA_PHOTOS = 5;
@@ -230,9 +229,6 @@ export const GAME_LABELS: Record<DeckGame['type'], { name: string; item: string 
 };
 
 export function emptyGame(type: DeckGame['type']): DeckGame {
-  if (type === 'define') return { type, settings: {}, items: [] };
-  if (type === 'geo') return { type, settings: {}, items: [] };
-  if (type === 'choice') return { type, settings: {}, items: [] };
   return { type, settings: {}, items: [] };
 }
 
@@ -256,8 +252,8 @@ export function emptyDeck(): DeckContent {
   };
 }
 
-/** Real words, for the sample deck and for a game started without a deck. */
-export const SAMPLE_WORDS = [
+/** Real words, for the sample deck. */
+const SAMPLE_WORDS = [
   { word: 'komorebi', definition: 'Sunlight filtering through the leaves of trees' },
   { word: 'tsundoku', definition: 'Buying books and letting them pile up unread' },
   { word: 'kuidaore', definition: 'Eating and drinking yourself into ruin' },
@@ -351,7 +347,7 @@ export function deckProblems(content: DeckContent): string[] {
         const definition = cleanName(item.definition);
         if (!word) problems.push(`${where}: add the word.`);
         if (Array.from(word).length > MAX_WORD) problems.push(`${where}: shorten it to ${MAX_WORD} characters.`);
-        const wrong = answerProblem(definition);
+        const wrong = textProblem(definition, MAX_ANSWER_LENGTH);
         if (wrong === 'empty') problems.push(`${where}: add the real definition.`);
         if (wrong === 'too_long') {
           problems.push(`${where}: shorten the definition to ${MAX_ANSWER_LENGTH} characters.`);

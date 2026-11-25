@@ -1,6 +1,6 @@
-import { SAMPLE_WORDS } from '../../shared/deck.js';
+import { randomId } from '../ids.js';
 import type { Storage } from '../storage/index.js';
-import { randomId, Room, type RoomSetup } from './room.js';
+import { Room, type RoomSetup } from './room.js';
 import { TokenBucket } from './rate-limit.js';
 
 const SNAPSHOT_PREFIX = 'rooms/';
@@ -8,7 +8,7 @@ const SNAPSHOT_DELAY_MS = 2000;
 const RETRY_DELAY_MS = 5000;
 const ROOM_LIFETIME_MS = 24 * 60 * 60 * 1000;
 /** Every live game is held in memory, so there's a ceiling on how many can run at once. */
-export const MAX_LIVE_ROOMS = 500;
+const MAX_LIVE_ROOMS = 500;
 
 /** Thrown when starting one more game would pass the ceiling. */
 export class TooManyRoomsError extends Error {
@@ -32,20 +32,7 @@ function snapshotKey(roomId: string): string {
   return `${SNAPSHOT_PREFIX}${roomId}.json`;
 }
 
-/** What a game plays when no deck is named. */
-export const STARTER_SETUP: RoomSetup = {
-  title: 'The Presentation Game',
-  games: [
-    {
-      type: 'define',
-      items: SAMPLE_WORDS,
-    },
-    { type: 'geo' },
-    { type: 'caption' },
-  ],
-};
-
-export interface ManagerOptions {
+interface ManagerOptions {
   storage: Storage;
   now?: () => number;
   snapshotDelayMs?: number;

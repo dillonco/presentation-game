@@ -82,9 +82,7 @@ describe('hardening', () => {
       fetch(`${harness!.url}/socket.io/?EIO=4&transport=polling`, { headers: { 'x-forwarded-for': ip } }).then(
         (response) => response.status,
       );
-    expect([await handshake('203.0.113.1'), await handshake('203.0.113.1'), await handshake('203.0.113.1')]).toEqual([
-      200, 200, 200,
-    ]);
+    expect([await handshake('203.0.113.1'), await handshake('203.0.113.1')]).toEqual([200, 200]);
     expect(await handshake('203.0.113.1')).toBe(403);
     expect(await handshake('203.0.113.2')).toBe(200);
   });

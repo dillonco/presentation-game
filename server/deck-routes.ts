@@ -25,20 +25,17 @@ import { spotAllowed } from './outlines.js';
 import { lookUpPlace } from './places.js';
 import { sampleDeckWithPhotos } from './sample.js';
 import { TooManyRoomsError, type RoomManager } from './session/manager.js';
-import type { RoomSetup } from './session/room.js';
 import type { Sessions } from './session/sockets.js';
 
-const startSchema = z.strictObject({ deckId: z.string().regex(DECK_ID_PATTERN).optional() });
+const startSchema = z.strictObject({ deckId: z.string().regex(DECK_ID_PATTERN) });
 const placeSchema = z.strictObject({ url: z.string().max(MAX_LINK) });
 
-export interface DeckRouteOptions {
+interface DeckRouteOptions {
   auth: AdminAuth;
   decks: DeckStore;
   media: MediaStore;
   rooms: RoomManager;
   sessions: Sessions;
-  /** What a game plays when no deck is named. Tests use it for short games. */
-  fallbackSetup: RoomSetup;
   onError: (error: unknown, message: string) => void;
   /** Follows short Google Maps links. Tests swap it so they never reach the network. */
   lookUp?: typeof fetch;
@@ -78,7 +75,7 @@ function deckIdFrom(params: unknown): string | null {
 
 /** Everything in here shows real answers, so it all needs the signed-in presenter. */
 export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
-  const { auth, decks, media, rooms, sessions, fallbackSetup, onError, lookUp = fetch, maxVideoUploads = 4, maxPhotoUploads = 24, sampleDeck } = options;
+  const { auth, decks, media, rooms, sessions, onError, lookUp = fetch, maxVideoUploads = 4, maxPhotoUploads = 24, sampleDeck } = options;
 
   return async (scope: FastifyInstance) => {
     // Runs before the body is read, so a stranger can't make the server take in a large upload.
@@ -230,42 +227,27 @@ export function deckRoutes(options: DeckRouteOptions): FastifyPluginAsync {
       return { ok: true };
     });
 
-    const startRoom = async (setup: RoomSetup, reply: FastifyReply) => {
-      try {
-        return await rooms.create(setup);
-      } catch (error) {
-        if (!(error instanceof TooManyRoomsError)) throw error;
-        await reply.code(503).send({
-          error: 'too_many_games',
-          problems: ['Too many games are running on this server right now. End an old one, or try again later.'],
-        });
-        return null;
-      }
-    };
-
     scope.post('/api/admin/rooms', async (request, reply) => {
       const body = startSchema.safeParse(request.body ?? {});
       if (!body.success) return reply.code(400).send({ error: 'bad_request' });
-
-      let setup: RoomSetup;
-      if (!body.data.deckId) {
-        setup = fallbackSetup;
-      } else {
-        const deck = await decks.get(body.data.deckId);
-        if (!deck) return reply.code(404).send({ error: 'not_found' });
-        const problems = [
-          ...deckProblems(deck.content),
-          ...locationProblems(deck.content),
-          ...(await missingPhotos(deck, media)),
-        ];
-        if (problems.length > 0) return reply.code(409).send({ error: 'not_ready', problems });
-        setup = deckToSetup(deck.content);
-        void media.warm(imagesInDeck(deck.content)).catch((error) => onError(error, 'Warming photos failed'));
+      const deck = await decks.get(body.data.deckId);
+      if (!deck) return reply.code(404).send({ error: 'not_found' });
+      const problems = [
+        ...deckProblems(deck.content),
+        ...locationProblems(deck.content),
+        ...(await missingPhotos(deck, media)),
+      ];
+      if (problems.length > 0) return reply.code(409).send({ error: 'not_ready', problems });
+      void media.warm(imagesInDeck(deck.content)).catch((error) => onError(error, 'Warming photos failed'));
+      try {
+        return { id: (await rooms.create(deckToSetup(deck.content))).id };
+      } catch (error) {
+        if (!(error instanceof TooManyRoomsError)) throw error;
+        return reply.code(503).send({
+          error: 'too_many_games',
+          problems: ['Too many games are running on this server right now. End an old one, or try again later.'],
+        });
       }
-
-      const room = await startRoom(setup, reply);
-      if (!room) return reply;
-      return { id: room.id };
     });
   };
 }

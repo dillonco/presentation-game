@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DiskStorage } from '../../server/storage/disk.js';
 import { createStorage } from '../../server/storage/index.js';
+import { S3Storage } from '../../server/storage/s3.js';
 import { assertSafeKey } from '../../server/storage/types.js';
 
 describe('DiskStorage', () => {
@@ -76,11 +77,11 @@ describe('storage keys', () => {
 
 describe('createStorage', () => {
   it('uses disk when S3 variables are missing', () => {
-    expect(createStorage({ DATA_DIR: tmpdir() }).backend).toBe('disk');
+    expect(createStorage({ DATA_DIR: tmpdir() })).toBeInstanceOf(DiskStorage);
   });
 
   it('uses disk when S3 variables are only partly set', () => {
-    expect(createStorage({ DATA_DIR: tmpdir(), S3_BUCKET: 'x' }).backend).toBe('disk');
+    expect(createStorage({ DATA_DIR: tmpdir(), S3_BUCKET: 'x' })).toBeInstanceOf(DiskStorage);
   });
 
   it('uses S3 at an endpoint, such as MinIO', () => {
@@ -90,11 +91,11 @@ describe('createStorage', () => {
       S3_ACCESS_KEY: 'test-access',
       S3_SECRET_KEY: 'test-secret',
     });
-    expect(storage.backend).toBe('s3');
+    expect(storage).toBeInstanceOf(S3Storage);
   });
 
   it('uses Amazon S3 itself when no endpoint is set', () => {
     const storage = createStorage({ S3_BUCKET: 'bucket', S3_ACCESS_KEY: 'test-access', S3_SECRET_KEY: 'test-secret' });
-    expect(storage.backend).toBe('s3');
+    expect(storage).toBeInstanceOf(S3Storage);
   });
 });
