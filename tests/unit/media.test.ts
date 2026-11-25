@@ -202,20 +202,6 @@ describe('the photo store', () => {
     expect(await fresh.videoFile(newVideoId())).toBeNull();
   });
 
-  it("adds up what each space keeps, as photos are claimed, grown and deleted", async () => {
-    const space = 'abcdefghijklmnop';
-    const id = newImageId();
-    await media.save(id, 'full', PLAIN);
-    await media.claim(space, id, PLAIN.length);
-    expect(await media.bytesOwned(space)).toBe(PLAIN.length);
-    await media.addBytes(space, id, 100);
-    expect(await media.bytesOwned(space)).toBe(PLAIN.length + 100);
-    // Worked out again from storage by another server, it's the same.
-    expect(await new MediaStore(storage, join(root, 'other')).bytesOwned(space)).toBe(PLAIN.length + 100);
-    await media.deleteOwned(space, id);
-    expect(await media.bytesOwned(space)).toBe(0);
-  });
-
   it('survives warming photos that are missing', async () => {
     await expect(media.warm([newImageId()])).resolves.toBeUndefined();
   });

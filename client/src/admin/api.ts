@@ -73,29 +73,7 @@ export const api = {
   lookUpPlace: (url: string) =>
     call<{ place: TipPlace }>('/api/admin/places', json('POST', { url })).then((result) => result.place),
   signOut: () => call('/api/admin/logout', { method: 'POST' }),
-  space: () =>
-    call<{ space: { code: string; presenterKey: string } | null }>('/api/admin/space').then((result) => result.space),
-  resetPresenterLink: () =>
-    call<{ space: { code: string; presenterKey: string } }>('/api/admin/space/reset', { method: 'POST' }).then(
-      (result) => result.space,
-    ),
 };
-
-/** What to say when a hosted space has reached one of its limits, or null for any other error. */
-export function spaceFullMessage(error: unknown): string | null {
-  if (!(error instanceof ApiError)) return null;
-  if (error.body.error === 'too_many_photos') {
-    return 'this space holds as many photos and videos as it can. Delete a deck you no longer need to make room.';
-  }
-  if (error.body.error === 'too_many_videos') {
-    return 'this space holds as many videos as it can. Use a photo, or delete a deck with videos you no longer need.';
-  }
-  if (error.body.error === 'space_full') {
-    return 'this space holds as much as it can. Delete a deck with photos or videos you no longer need to make room.';
-  }
-  if (error.body.error === 'too_many_decks') return 'This space holds as many decks as it can. Delete one to make room.';
-  return null;
-}
 
 /** Sends a browser to the host page, or says what's still missing. */
 export function startProblems(error: unknown): string[] {

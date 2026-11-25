@@ -57,32 +57,6 @@ html[data-page='desk'] #root {
   gap: 8px;
 }
 
-.space-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 24px;
-  padding: 16px;
-  margin-bottom: 24px;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-}
-
-.space-label {
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 400;
-}
-
-.space-code {
-  font-family: var(--font-stage);
-  font-size: 36px;
-  letter-spacing: 0.15em;
-}
-
-.space-details .key {
-  margin-top: 12px;
-}
-
 .desk-message {
   min-height: 24px;
   margin-top: 8px;

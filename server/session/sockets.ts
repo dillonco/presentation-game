@@ -62,11 +62,6 @@ const tokenChannel = (roomId: string, tokenHash: string) => `token:${roomId}:${t
 export interface Sessions {
   /** Tells everyone in a deleted room that the game is over, then lets them go. */
   endRoom(roomId: string): void;
-  /**
-   * Lets go of every TV connected to these rooms, so a device whose session was just revoked
-   * stops receiving the game. A TV that still has a valid session simply connects again.
-   */
-  dropHosts(roomIds: string[]): void;
   close(): void;
 }
 
@@ -316,12 +311,10 @@ export function registerSessions(
   function registerHost(socket: Socket): void {
     const { roomId } = socket.data as SocketState;
     void socket.join(hostChannel(roomId));
-    rooms.watching(roomId, 1);
-    socket.on('disconnect', () => rooms.watching(roomId, -1));
     on(socket, 'host:hello', emptySchema, (_payload, room) => ({ ok: true, view: room.hostView() }));
     on(socket, 'host:command', hostCommandSchema, (command, room) => {
       // Checked on every command too, so an expired session can't keep driving the game.
-      if (auth.presenterSpace(socket.handshake.headers) !== room.space) return { ok: false, code: 'unauthorized' };
+      if (!auth.isSignedIn(socket.handshake.headers)) return { ok: false, code: 'unauthorized' };
       return runCommand(command, room);
     });
   }
@@ -337,7 +330,7 @@ export function registerSessions(
     if (options.forceHttps && !overHttps(headers)) return callback('https_only', false);
     const total = io.engine.clientsCount;
     if (total >= MAX_CONNECTIONS + HOST_HEADROOM) return callback('slow_down', false);
-    if (total >= MAX_CONNECTIONS && auth.presenterSpace(headers) === null) return callback('slow_down', false);
+    if (total >= MAX_CONNECTIONS && !auth.isSignedIn(headers)) return callback('slow_down', false);
     const found = findAddress(request.socket.remoteAddress, headers);
     const address = found && visitorKey(found);
     if (address && (engineAddressConnections.get(address) ?? 0) >= engineAddressCeiling) return callback('slow_down', false);
@@ -374,10 +367,7 @@ export function registerSessions(
     if (handshake.data.role === 'host') {
       const { origin, host } = socket.handshake.headers;
       const sameOrigin = !origin || (URL.canParse(origin) && new URL(origin).host === host);
-      // Only the presenter whose game it is can run it, not one from another space.
-      if (!sameOrigin || auth.presenterSpace(socket.handshake.headers) !== room.space) {
-        return next(new Error('unauthorized'));
-      }
+      if (!sameOrigin || !auth.isSignedIn(socket.handshake.headers)) return next(new Error('unauthorized'));
     }
     const state: SocketState = {
       roomId: handshake.data.room,
@@ -423,8 +413,7 @@ export function registerSessions(
     for (const socket of io.of('/').sockets.values()) {
       const state = socket.data as SocketState | undefined;
       if (state?.role !== 'host') continue;
-      const room = rooms.get(state.roomId);
-      if (!room || auth.presenterSpace(socket.handshake.headers) !== room.space) socket.disconnect(true);
+      if (!rooms.get(state.roomId) || !auth.isSignedIn(socket.handshake.headers)) socket.disconnect(true);
     }
   }, options.sessionCheckMs ?? SESSION_CHECK_MS);
   sessionChecker.unref();
@@ -451,9 +440,6 @@ export function registerSessions(
   ticker.unref();
 
   return {
-    dropHosts(roomIds) {
-      for (const roomId of roomIds) io.in(hostChannel(roomId)).disconnectSockets(true);
-    },
     endRoom(roomId) {
       const pending = pendingBroadcasts.get(roomId);
       if (pending) clearTimeout(pending);

@@ -8,7 +8,6 @@ import { DeckList } from './DeckList.js';
 import { PhoneShell } from '../ui/PhoneShell.js';
 import { StatusArea, type StatusContent } from '../ui/StatusArea.js';
 import { APP_NAME } from '../appName.js';
-import { StartSpace } from '../Home.js';
 
 /** Only ever returns to a presenter page, so a crafted link can't send you to another site. */
 function safeNext(): string | null {
@@ -80,14 +79,6 @@ const DECK_PATH = /^\/admin\/decks\/([A-Za-z0-9_-]{16})\/?$/;
 
 export default function AdminApp() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [config, setConfig] = useState<{ hosted: boolean; passwordSignIn: boolean } | null>(null);
-
-  useEffect(() => {
-    void fetch('/api/config')
-      .then((response) => response.json())
-      .then(setConfig)
-      .catch(() => setConfig({ hosted: false, passwordSignIn: true }));
-  }, []);
 
   const refresh = useCallback(() => {
     void fetch('/api/admin/me')
@@ -108,7 +99,7 @@ export default function AdminApp() {
     else delete document.documentElement.dataset.page;
   }, [signedIn]);
 
-  if (signedIn === null || config === null) return null;
+  if (signedIn === null) return null;
   if (signedIn) {
     const deckId = DECK_PATH.exec(window.location.pathname)?.[1];
     return deckId ? <DeckEditor deckId={deckId} /> : <DeckList onSignOut={() => setSignedIn(false)} />;
@@ -120,23 +111,7 @@ export default function AdminApp() {
           <p className="kicker">{APP_NAME}</p>
           <h1 className="deck-title">Presenter</h1>
         </header>
-        {config.hosted ? (
-          <>
-            <p className="home-host-body">
-              Make a space to build your decks. No account needed: this browser becomes its presenter. Already have
-              one? Open your presenter link on this device.
-            </p>
-            <StartSpace />
-            {config.passwordSignIn ? (
-              <details className="server-sign-in">
-                <summary>Run this server? Sign in with its password</summary>
-                <SignIn onSignedIn={refresh} />
-              </details>
-            ) : null}
-          </>
-        ) : (
-          <SignIn onSignedIn={refresh} />
-        )}
+        <SignIn onSignedIn={refresh} />
       </main>
     </PhoneShell>
   );

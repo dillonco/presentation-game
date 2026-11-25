@@ -27,10 +27,10 @@ describe('AdminAuth', () => {
     const auth = new AdminAuth({ password: 'open', sessionSecret: secret });
     const { value } = auth.issue();
     expect(auth.isValid(value)).toBe(true);
-    const [version, expires, space, signature] = value.split('.');
-    expect(auth.isValid(`${version}.${Number(expires) + 9999}.${space}.${signature}`)).toBe(false);
-    expect(auth.isValid(`${version}.${expires}.${space}.${signature}x`)).toBe(false);
-    expect(auth.isValid(`${version}.${expires}.abcdefghijklmnop.${signature}`)).toBe(false);
+    const [expires, signature] = value.split('.');
+    expect(auth.isValid(`${Number(expires) + 9999}.${signature}`)).toBe(false);
+    expect(auth.isValid(`${expires}.${signature}x`)).toBe(false);
+    expect(auth.isValid(`${expires}.${signature}.extra`)).toBe(false);
     expect(auth.isValid('junk')).toBe(false);
     expect(auth.isValid(null)).toBe(false);
   });
@@ -68,48 +68,9 @@ describe('AdminAuth', () => {
     expect(auth.isSignedIn({ cookie: `__Host-tp_admin=${value}` })).toBe(false);
   });
 
-  it('says which space a session opens', () => {
-    const auth = new AdminAuth({ password: 'open', sessionSecret: secret });
-    auth.useSpaceGenerations((space) => (space === 'abcdefghijklmnop' ? 0 : null));
-    expect(auth.spaceOf(auth.issue().value)).toBe('main');
-    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
-    expect(auth.spaceOf(auth.issue('not/a.space').value)).toBe(null);
-  });
-
-  it('signs hosted spaces without a password, but never the main space', () => {
-    const auth = new AdminAuth({ sessionSecret: secret });
-    auth.useSpaceGenerations(() => 0);
-    expect(auth.enabled).toBe(false);
-    expect(auth.canSign).toBe(true);
-    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
-    expect(auth.spaceOf(auth.issue('main').value)).toBe(null);
-  });
-
-  it("ends a space's sessions when its presenter link is reset, and refuses spaces that don't exist", () => {
-    const auth = new AdminAuth({ sessionSecret: secret });
-    let generation: number | null = 0;
-    auth.useSpaceGenerations(() => generation);
-    const before = auth.issue('abcdefghijklmnop').value;
-    expect(auth.spaceOf(before)).toBe('abcdefghijklmnop');
-    generation = 1;
-    expect(auth.spaceOf(before)).toBe(null);
-    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe('abcdefghijklmnop');
-    generation = null;
-    expect(auth.spaceOf(auth.issue('abcdefghijklmnop').value)).toBe(null);
-  });
-
-  it("can't be talked into a newer generation by editing the cookie", () => {
-    const auth = new AdminAuth({ sessionSecret: secret });
-    let generation = 0;
-    auth.useSpaceGenerations(() => generation);
-    const [version, expires, space, , signature] = auth.issue('abcdefghijklmnop').value.split('.');
-    generation = 1;
-    expect(auth.spaceOf([version, expires, space, '1', signature].join('.'))).toBe(null);
-  });
-
-  it('signs every presenter out of the main space when the password changes', () => {
+  it('signs every presenter out when the password changes', () => {
     const value = new AdminAuth({ password: 'old-password', sessionSecret: secret }).issue().value;
-    expect(new AdminAuth({ password: 'old-password', sessionSecret: secret }).spaceOf(value)).toBe('main');
-    expect(new AdminAuth({ password: 'new-password', sessionSecret: secret }).spaceOf(value)).toBe(null);
+    expect(new AdminAuth({ password: 'old-password', sessionSecret: secret }).isValid(value)).toBe(true);
+    expect(new AdminAuth({ password: 'new-password', sessionSecret: secret }).isValid(value)).toBe(false);
   });
 });

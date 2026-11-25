@@ -107,7 +107,7 @@ async function withRetries<T>(work: () => Promise<T>): Promise<T> {
     try {
       return await work();
     } catch (error) {
-      // A full space or a refused file won't change by trying again.
+      // A refused file won't change by trying again.
       if (attempt >= ATTEMPTS || (error instanceof ApiError && error.status < 500)) throw error;
       await new Promise((resolve) => window.setTimeout(resolve, 800 * attempt));
     }

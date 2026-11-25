@@ -6,7 +6,7 @@ import {
   type DeckSummary,
 } from '../../../shared/deck.js';
 import { APP_NAME } from '../appName.js';
-import { api, ApiError, spaceFullMessage, startProblems, type RoomSummary } from './api.js';
+import { api, ApiError, startProblems, type RoomSummary } from './api.js';
 import { ConfirmKey, Key } from './controls.js';
 
 function describe(deck: DeckSummary): string {
@@ -37,7 +37,6 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ deckId: string; items: string[] } | null>(null);
-  const [space, setSpace] = useState<{ code: string; presenterKey: string } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -46,7 +45,6 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
       setDecks(list.decks);
       setSampleOffered(list.sampleDeck === true);
       setRooms(await api.rooms());
-      setSpace(await api.space());
     } catch {
       setDecks((current) => current ?? []);
       setMessage("Couldn't load your decks. Check the connection and refresh.");
@@ -59,8 +57,8 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
     setMessage(null);
     try {
       await work();
-    } catch (error) {
-      setMessage(spaceFullMessage(error) ?? failure);
+    } catch {
+      setMessage(failure);
     }
   };
 
@@ -95,23 +93,11 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
         <Key
           label="Sign out"
           onPress={async () => {
-            // A hosted space has no password, so its presenter link is the only way back in.
-            if (space && !window.confirm('Copy your presenter link first. Without it, you can\'t get back into this space.')) {
-              return;
-            }
             await api.signOut().catch(() => undefined);
             onSignOut();
           }}
         />
       </header>
-
-      {space ? (
-        <SpaceDetails
-          code={space.code}
-          presenterKey={space.presenterKey}
-          onReset={() => attempt(async () => setSpace(await api.resetPresenterLink()), "Couldn't reset the link. Try again.")}
-        />
-      ) : null}
 
       <div className="desk-actions">
         <Key
@@ -262,48 +248,5 @@ export function DeckList({ onSignOut }: { onSignOut: () => void }) {
         </section>
       ) : null}
     </main>
-  );
-}
-
-/** A hosted space's join code and presenter link. */
-function SpaceDetails({ code, presenterKey, onReset }: { code: string; presenterKey: string; onReset: () => Promise<void> }) {
-  const [copied, setCopied] = useState(false);
-  // After the #, so the key never reaches the server's logs, a proxy, or another site's Referer.
-  const link = `${window.location.origin}/p#${presenterKey}`;
-  return (
-    <section className="space-details" aria-label="Your space">
-      <div>
-        <h2 className="space-label">Join code</h2>
-        <p className="space-code">{code}</p>
-        <p className="desk-hint">
-          Shown on the TV with the QR code. Guests can also type it at {window.location.host}.
-        </p>
-      </div>
-      <div>
-        <h2 className="space-label">Presenter link</h2>
-        <p className="desk-hint">
-          Open it on another device to present from there. Keep it private: it shows your answers.
-        </p>
-        <Key
-          label={copied ? 'Copied' : 'Copy presenter link'}
-          onPress={async () => {
-            await navigator.clipboard.writeText(link).catch(() => window.prompt('Copy your presenter link:', link));
-            setCopied(true);
-          }}
-        />
-        <Key
-          label="Reset presenter link"
-          busyLabel="Resetting…"
-          onPress={async () => {
-            const sure = window.confirm(
-              'Make a new presenter link? The old one stops working, and every other device presenting this space is signed out. Copy the new link afterwards.',
-            );
-            if (!sure) return;
-            await onReset();
-            setCopied(false);
-          }}
-        />
-      </div>
-    </section>
   );
 }

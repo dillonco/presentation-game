@@ -90,10 +90,6 @@ const settingsSchema = z
 
 const setupSchema = z.object({
   title: z.string(),
-  /** Whose game this is. Left out, it's the main space's. */
-  space: z.string().optional(),
-  /** What guests type to join, on a hosted server. */
-  joinCode: z.string().optional(),
   accent: z.object({ light: z.string(), dark: z.string() }).optional(),
   country: z.string().optional(),
   capacity: z.number().int().positive().optional(),
@@ -461,14 +457,6 @@ export class Room {
     this.capacity = setup.capacity ?? MAX_PLAYERS;
     this.createdAt = now;
     this.updatedAt = now;
-  }
-
-  get space(): string {
-    return this.setup.space ?? 'main';
-  }
-
-  get joinCode(): string | null {
-    return this.setup.joinCode ?? null;
   }
 
   get finished(): boolean {
@@ -1256,7 +1244,6 @@ export class Room {
       version: this.version,
       roomId: this.id,
       title: this.title,
-      joinCode: this.joinCode,
       accent: this.setup.accent ?? null,
       screen: this.hostScreen(),
       screenId: this.screenIndex,

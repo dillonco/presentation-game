@@ -168,14 +168,6 @@ function Lobby({ view, joinUrl }: { view: HostView; joinUrl: string }) {
           <div className="lobby-caption">
             <p className="lobby-instruction">{instruction}</p>
             <p className="lobby-sub">{sub}</p>
-            {view.joinCode ? (
-              <p className="lobby-sub">
-                Or go to {window.location.host} and type
-                <span className="lobby-code" aria-label={view.joinCode.split('').join(' ')}>
-                  {view.joinCode}
-                </span>
-              </p>
-            ) : null}
           </div>
         </section>
         {view.players.length === 0 ? (
@@ -258,7 +250,7 @@ function PlayerPanel({
 }
 
 /**
- * The join code again, for after the lobby: a guest who closed the page scans it to get back in.
+ * The join QR code again, for after the lobby: a guest who closed the page scans it to get back in.
  * The same phone still holds its place and goes straight back. Another phone enters the same name,
  * and the TV asks the presenter.
  */

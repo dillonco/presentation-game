@@ -139,7 +139,7 @@ describe('decks and photos', () => {
         body: JSON.stringify({ password: PASSWORD }),
       });
       const set = response.headers.get('set-cookie')!;
-      expect(set).toMatch(/^__Host-tp_admin=v3\./);
+      expect(set).toMatch(/^__Host-tp_admin=\d+\./);
       expect(set).toContain('; Secure');
       expect(set).toContain('; Path=/');
       expect(set).not.toContain('Domain');
@@ -284,24 +284,6 @@ describe('decks and photos', () => {
       const served = await fetch(`${harness.url}/media/${id}/small.jpg`);
       expect(served.headers.get('cache-control')).toContain('immutable');
       expect((await served.arrayBuffer()).byteLength).toBeLessThan(WITH_GPS.length);
-    });
-
-    it("never replaces a small copy once it's there, though the same copy again is fine", async () => {
-      const id = await upload(WITH_GPS);
-      const put = (body: Buffer) =>
-        fetch(`${harness.url}/api/admin/images/${id}/small`, {
-          method: 'PUT',
-          headers: { cookie, 'content-type': 'image/jpeg' },
-          body: new Uint8Array(body),
-        });
-      expect((await put(PLAIN)).status).toBe(200);
-      // A retry after a lost reply.
-      expect((await put(PLAIN)).status).toBe(200);
-      const swap = await put(WITH_GPS);
-      expect(swap.status).toBe(409);
-      expect(await swap.json()).toEqual({ error: 'already_added' });
-      const served = Buffer.from(await (await fetch(`${harness.url}/media/${id}/small.jpg`)).arrayBuffer());
-      expect(served).toEqual(cleanJpeg(PLAIN)!.body);
     });
 
     it('needs the photo to exist before adding a small copy of it', async () => {
@@ -476,13 +458,6 @@ describe('decks and photos', () => {
       expect((await putStill(`v${SOME_IMAGE_ID}`, 'full')).status).toBe(404);
       const photo = await upload();
       expect((await putStill(photo, 'full')).status).toBe(404);
-    });
-
-    it("never replaces a video's poster once it's there", async () => {
-      const id = await addVideo();
-      expect((await putStill(id, 'full')).status).toBe(200);
-      expect((await putStill(id, 'full', WITH_GPS)).status).toBe(409);
-      expect((await putStill(id, 'small', WITH_GPS)).status).toBe(409);
     });
 
     it('needs its poster before a game can start', async () => {

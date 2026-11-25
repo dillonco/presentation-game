@@ -69,39 +69,10 @@ html[data-surface='paper'] body {
   display: block;
 }
 
-/* The front page on a hosted server: join by code, or make a space. */
-.code-input {
-  font-family: var(--font-stage);
-  font-size: 28px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.home-host {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--hair);
-}
-
-.home-host-title {
-  font-family: var(--font-stage);
-  font-size: 22px;
-  font-weight: 500;
-}
-
-.home-host-body {
+/* The front page. */
+.home-body {
   margin: 8px 0 16px;
   color: var(--ink-2);
-}
-
-.server-sign-in {
-  margin-top: 40px;
-  color: var(--ink-2);
-}
-
-.server-sign-in summary {
-  margin-bottom: 16px;
-  cursor: pointer;
 }
 
 /* A one-sentence screen: joined, removed, not found and so on. */

@@ -30,7 +30,7 @@ export interface Harness {
 }
 
 export async function startHarness(options: AppOptions = {}): Promise<Harness> {
-  const root = await mkdtemp(join(tmpdir(), 'trip-party-'));
+  const root = await mkdtemp(join(tmpdir(), 'presentation-game-'));
   const build = () =>
     createApp({
       storage: new DiskStorage(root),
@@ -42,8 +42,8 @@ export async function startHarness(options: AppOptions = {}): Promise<Harness> {
       ...options,
     });
 
-  async function listen(app: App, port = 0): Promise<string> {
-    await app.fastify.listen({ port, host: '127.0.0.1' });
+  async function listen(app: App): Promise<string> {
+    await app.fastify.listen({ port: 0, host: '127.0.0.1' });
     return `http://127.0.0.1:${(app.fastify.server.address() as AddressInfo).port}`;
   }
 
@@ -87,13 +87,13 @@ export async function startHarness(options: AppOptions = {}): Promise<Harness> {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
     },
 
+    // On a new port, so fetch can't reuse a kept-alive connection to the old server (ECONNRESET).
     async restart() {
-      const { port } = harness.app.fastify.server.address() as AddressInfo;
       await harness.app.rooms.flush();
       await stopServer(harness.app, harness.sockets);
       harness.sockets.length = 0;
       harness.app = await build();
-      harness.url = await listen(harness.app, port);
+      harness.url = await listen(harness.app);
     },
   };
 

@@ -22,4 +22,3 @@ Fixes go into the latest version only, so please check that the problem is still
   count, or visitors can choose their own address. Check that the proxy passes on real addresses
   first: `yourAddress` in `/api/admin/stats` should be yours. If every visitor shows up as one
   internal address, leave `TRUST_PROXY` out, or one visitor's limit becomes everyone's.
-- With `HOSTED=true`, run a single instance. Rate limits and space sessions are kept in memory.

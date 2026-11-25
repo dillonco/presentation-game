@@ -9,16 +9,12 @@ import {
   type StoredDeck,
 } from '../shared/deck.js';
 import { randomId, type RoomSetup } from './session/room.js';
-import { MAIN_SPACE, spacePrefix } from './spaces.js';
 import type { Storage } from './storage/index.js';
 
-/** The main space keeps decks where they always were, so existing servers carry on as before. */
-function folderFor(space: string): string {
-  return space === MAIN_SPACE ? 'decks/' : `${spacePrefix(space)}decks/`;
-}
+const FOLDER = 'decks/';
 
-function keyFor(space: string, id: string): string {
-  return `${folderFor(space)}${id}.json`;
+function keyFor(id: string): string {
+  return `${FOLDER}${id}.json`;
 }
 
 export type SaveOutcome =
@@ -27,10 +23,7 @@ export type SaveOutcome =
   /** Saved from somewhere else since this copy was opened. */
   | { kind: 'conflict'; revision: number };
 
-/**
- * Decks live in storage, because containers lose their files when they're replaced. Every call
- * names the space, so one presenter can never reach another's decks.
- */
+/** Decks live in storage, because containers lose their files when they're replaced. */
 export class DeckStore {
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -46,12 +39,12 @@ export class DeckStore {
     return result;
   }
 
-  private write(space: string, deck: StoredDeck): Promise<void> {
-    return this.storage.put(keyFor(space, deck.id), JSON.stringify(deck), 'application/json');
+  private write(deck: StoredDeck): Promise<void> {
+    return this.storage.put(keyFor(deck.id), JSON.stringify(deck), 'application/json');
   }
 
-  async get(space: string, id: string): Promise<StoredDeck | null> {
-    const stored = await this.storage.get(keyFor(space, id));
+  async get(id: string): Promise<StoredDeck | null> {
+    const stored = await this.storage.get(keyFor(id));
     if (!stored) return null;
     try {
       return storedDeckSchema.parse(JSON.parse(stored.body.toString('utf8')));
@@ -60,20 +53,15 @@ export class DeckStore {
     }
   }
 
-  async count(space: string): Promise<number> {
-    return (await this.storage.list(folderFor(space))).length;
-  }
-
-  async all(space: string): Promise<StoredDeck[]> {
-    const folder = folderFor(space);
+  async all(): Promise<StoredDeck[]> {
     const decks = await Promise.all(
-      (await this.storage.list(folder)).map((key) => this.get(space, key.slice(folder.length, -'.json'.length))),
+      (await this.storage.list(FOLDER)).map((key) => this.get(key.slice(FOLDER.length, -'.json'.length))),
     );
     return decks.filter((deck): deck is StoredDeck => deck !== null);
   }
 
-  async summaries(space: string): Promise<DeckSummary[]> {
-    return (await this.all(space))
+  async summaries(): Promise<DeckSummary[]> {
+    return (await this.all())
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((deck) => ({
         id: deck.id,
@@ -83,29 +71,27 @@ export class DeckStore {
       }));
   }
 
-  /** Null when the space already holds `limit` decks. Counted in turn, so decks made at once can't pass it together. */
-  create(space: string, content: DeckContent, limit = Infinity): Promise<StoredDeck | null> {
+  create(content: DeckContent): Promise<StoredDeck> {
     return this.inTurn(async () => {
-      if (limit !== Infinity && (await this.count(space)) >= limit) return null;
       const deck: StoredDeck = { id: randomId(12), revision: 1, updatedAt: this.now(), content };
-      await this.write(space, deck);
+      await this.write(deck);
       return deck;
     });
   }
 
-  save(space: string, id: string, revision: number, content: DeckContent): Promise<SaveOutcome> {
+  save(id: string, revision: number, content: DeckContent): Promise<SaveOutcome> {
     return this.inTurn(async () => {
-      const current = await this.get(space, id);
+      const current = await this.get(id);
       if (!current) return { kind: 'missing' };
       if (current.revision !== revision) return { kind: 'conflict', revision: current.revision };
       const deck: StoredDeck = { ...current, revision: revision + 1, updatedAt: this.now(), content };
-      await this.write(space, deck);
+      await this.write(deck);
       return { kind: 'saved', deck };
     });
   }
 
-  delete(space: string, id: string): Promise<void> {
-    return this.inTurn(() => this.storage.delete(keyFor(space, id)));
+  delete(id: string): Promise<void> {
+    return this.inTurn(() => this.storage.delete(keyFor(id)));
   }
 }
 

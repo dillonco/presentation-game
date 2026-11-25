@@ -232,8 +232,6 @@ export interface HostView {
   version: number;
   roomId: string;
   title: string;
-  /** Guests can type this on the home page to join, on a hosted server. */
-  joinCode: string | null;
   accent: AccentColours | null;
   screen: HostScreen;
   screenId: number;

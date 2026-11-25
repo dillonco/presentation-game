@@ -154,7 +154,6 @@ describe('when the TV plays its sounds', () => {
     role: 'host',
     version: 1,
     roomId: 'r',
-    joinCode: null,
     title: 'T',
     accent: null,
     screen,

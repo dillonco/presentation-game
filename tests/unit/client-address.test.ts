@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AddressBuckets, clientAddress, proxyHops, visitorKey } from '../../server/client-address.js';
+import { clientAddress, proxyHops, visitorKey } from '../../server/client-address.js';
 
 describe("a visitor's address", () => {
   it('is unknown without a trusted proxy, whatever the request claims', () => {
@@ -22,17 +22,6 @@ describe("a visitor's address", () => {
     expect(proxyHops('nonsense')).toBe(0);
   });
 
-  it('gets its own allowance, and old addresses are forgotten', () => {
-    const buckets = new AddressBuckets(2, 0, 2);
-    expect(buckets.take('a', 0)).toBe(true);
-    expect(buckets.take('a', 0)).toBe(true);
-    expect(buckets.take('a', 0)).toBe(false);
-    expect(buckets.take('b', 0)).toBe(true);
-    buckets.take('c', 0);
-    // "a" was the oldest, so it starts again.
-    expect(buckets.take('a', 0)).toBe(true);
-  });
-
   it('counts a whole IPv6 /64 as one visitor', () => {
     expect(visitorKey('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64');
     expect(visitorKey('2001:db8:1:2:bbbb:cccc:dddd:eeee')).toBe('2001:db8:1:2::/64');
@@ -40,8 +29,5 @@ describe("a visitor's address", () => {
     expect(visitorKey('2001:0db8:0001:0002::9')).toBe('2001:db8:1:2::/64');
     expect(visitorKey('::ffff:203.0.113.1')).toBe('203.0.113.1');
     expect(visitorKey('203.0.113.1')).toBe('203.0.113.1');
-    const buckets = new AddressBuckets(1, 0);
-    expect(buckets.take('2001:db8:1:2::1', 0)).toBe(true);
-    expect(buckets.take('2001:db8:1:2::2', 0)).toBe(false);
   });
 });

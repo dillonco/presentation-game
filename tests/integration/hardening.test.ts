@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { io as ioConnect } from 'socket.io-client';
-import { emptyDeck } from '../../shared/deck.js';
 import { startHarness, type Harness } from './helpers.js';
 
 const PHOTO = readFileSync('tests/fixtures/plain.jpg');
@@ -51,7 +50,7 @@ describe('hardening', () => {
       expect(await login.json()).toEqual({ error: 'https_only' });
 
       expect((await fetch(`${harness.url}/healthz`)).status).toBe(200);
-      const secure = await fetch(`${harness.url}/api/config`, { headers: { 'x-forwarded-proto': 'https' } });
+      const secure = await fetch(`${harness.url}/api/admin/me`, { headers: { 'x-forwarded-proto': 'https' } });
       expect(secure.status).toBe(200);
     });
 
@@ -77,7 +76,7 @@ describe('hardening', () => {
   });
 
   it('caps the connections one address holds from their first request, not just once they join a room', async () => {
-    harness = await startHarness({ hosted: true, trustProxy: 1, maxAddressConnections: 2 });
+    harness = await startHarness({ trustProxy: 1, maxAddressConnections: 2 });
     // Engine handshakes that never go on to join a room still take a place each.
     const handshake = (ip: string) =>
       fetch(`${harness!.url}/socket.io/?EIO=4&transport=polling`, { headers: { 'x-forwarded-for': ip } }).then(
@@ -99,28 +98,5 @@ describe('hardening', () => {
     const gone = new Promise<void>((resolve) => tv.once('disconnect', () => resolve()));
     now += 13 * 60 * 60 * 1000;
     await gone;
-  });
-
-  it('holds each hosted space to its storage limit in bytes', async () => {
-    harness = await startHarness({ hosted: true, limits: { decks: 3, media: 10, games: 2, bytes: PHOTO.length * 2 + 10 } });
-    const response = await fetch(`${harness.url}/api/spaces`, { method: 'POST' });
-    const cookie = response.headers.get('set-cookie')!.split(';')[0]!;
-    const upload = () =>
-      fetch(`${harness!.url}/api/admin/images`, { method: 'POST', headers: { cookie, 'content-type': 'image/jpeg' }, body: PHOTO });
-    const first = (await (await upload()).json()) as { id: string };
-    expect((await upload()).status).toBe(200);
-    const third = await upload();
-    expect(third.status).toBe(409);
-    expect(await third.json()).toEqual({ error: 'space_full' });
-
-    // Deleting a deck deletes its photos, which frees the room again.
-    const deck = await fetch(`${harness.url}/api/admin/decks`, {
-      method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ ...emptyDeck(), games: [{ type: 'caption', settings: {}, items: [{ image: first.id }] }] }),
-    });
-    const { deck: saved } = (await deck.json()) as { deck: { id: string } };
-    expect((await fetch(`${harness.url}/api/admin/decks/${saved.id}`, { method: 'DELETE', headers: { cookie } })).status).toBe(200);
-    expect((await upload()).status).toBe(200);
   });
 });

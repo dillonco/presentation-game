@@ -37,7 +37,6 @@ import {
   roundClipTime,
 } from '../../../shared/youtube.js';
 import { YouTubeClip, type ClipState } from '../ui/YouTubeClip.js';
-import { ApiError, spaceFullMessage } from './api.js';
 import { Field, Key, NumberField } from './controls.js';
 import { addMedia, isVideoFile, VideoError, type AddedPhoto } from './photos.js';
 
@@ -750,8 +749,6 @@ export function ChoiceEditor({ game, uploads, onChange }: {
 
 /** One upload at a time, so a batch of big photos can't exhaust the browser's memory. */
 function uploadProblem(error: unknown, video: boolean): string {
-  const full = spaceFullMessage(error);
-  if (full) return full;
   if (!video) return "couldn't read or upload this photo. Try again.";
   if (error instanceof VideoError && error.problem === 'kind') return 'only MP4 and MOV videos work. Export it as MP4.';
   if (error instanceof VideoError && error.problem === 'size') {

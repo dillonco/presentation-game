@@ -137,7 +137,7 @@ test('F fills the screen with the TV, and F again leaves it', async ({ browser }
   await expect(tv.getByRole('button', { name: /^Full screen/ })).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('J brings the join code back after the lobby, and J or Esc puts it away', async ({ browser }) => {
+test('J brings the join QR code back after the lobby, and J or Esc puts it away', async ({ browser }) => {
   const { tv, room } = await startGame(browser);
   await joinAs(await openPhone(browser, room), 'Alex');
   const card = tv.getByRole('complementary', { name: 'Rejoin link' });

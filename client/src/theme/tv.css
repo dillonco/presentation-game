@@ -119,16 +119,6 @@ html[data-surface='panel'] body {
   font-size: 1.5rem;
 }
 
-.lobby-code {
-  display: block;
-  margin-top: 0.5rem;
-  color: var(--panel-ink);
-  font-family: var(--font-stage);
-  font-size: 3rem;
-  letter-spacing: 0.2em;
-  line-height: 1.1;
-}
-
 .names {
   display: grid;
   align-content: start;
@@ -218,7 +208,7 @@ html[data-surface='panel'] body {
   font-size: 1.5rem;
 }
 
-/* The join code over any screen after the lobby, until the presenter closes it. */
+/* The join QR code over any screen after the lobby, until the presenter closes it. */
 .tv-rejoin-scrim {
   position: fixed;
   inset: 0;
