@@ -91,7 +91,8 @@ interface MapSetup {
 /**
  * A map in the returned box, made again only when `deps` change, kept matched to the box's size,
  * and removed with the component. `setup` adds what this map needs. If the device can't run a
- * map, `onFail` is called instead.
+ * map, `onFail` is called instead. Anything `create` throws is taken to mean that, so it should do
+ * nothing but make the map: work out its options beforehand.
  */
 export function useMapInstance(
   create: (container: HTMLDivElement) => maplibregl.Map,

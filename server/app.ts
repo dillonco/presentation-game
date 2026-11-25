@@ -10,6 +10,7 @@ import { deckRoutes, registerMediaRoute } from './deck-routes.js';
 import { DeckStore } from './decks.js';
 import { MediaStore } from './media.js';
 import { RoomManager } from './session/manager.js';
+import { clearHostedLeftovers } from './hosted-leftovers.js';
 import { registerSessions, type Sessions } from './session/sockets.js';
 import { clientAddress, proxyHops } from './client-address.js';
 import { createStorage, type Storage } from './storage/index.js';
@@ -162,6 +163,16 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
     maxRooms: options.maxRooms,
     onSnapshotError: (error) => fastify.log.error(error, 'Saving game state failed'),
   });
+  const decks = new DeckStore(storage, rooms.now);
+  const cacheMb = Number(process.env.MEDIA_CACHE_MB);
+  const media = new MediaStore(
+    storage,
+    options.mediaCacheDir,
+    Number.isFinite(cacheMb) && cacheMb > 0 ? cacheMb * 1024 * 1024 : undefined,
+  );
+  // Before games are restored, so none of another space's games comes back.
+  const cleared = await clearHostedLeftovers({ storage, decks, media });
+  if (cleared.games + cleared.uploads > 0) fastify.log.info(cleared, 'Cleared what hosted spaces left in storage');
   const restored = await rooms.restore();
   if (restored > 0) fastify.log.info({ restored }, 'Restored rooms from storage');
   const forceHttps = options.forceHttps ?? ['true', '1'].includes(process.env.FORCE_HTTPS ?? '');
@@ -254,13 +265,6 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
   fastify.addHook('onClose', async () => loopDelay.disable());
 
-  const decks = new DeckStore(storage, rooms.now);
-  const cacheMb = Number(process.env.MEDIA_CACHE_MB);
-  const media = new MediaStore(
-    storage,
-    options.mediaCacheDir,
-    Number.isFinite(cacheMb) && cacheMb > 0 ? cacheMb * 1024 * 1024 : undefined,
-  );
   registerMediaRoute(fastify, media);
   await fastify.register(
     deckRoutes({
