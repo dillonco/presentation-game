@@ -1,11 +1,17 @@
 import { readFileSync } from 'node:fs';
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { closeEverything, failOnPageErrors, joinAs, openPhone } from './helpers.js';
+import {
+  closeEverything,
+  expectNoAccessibilityProblems,
+  FIXTURES,
+  joinAs,
+  makeDeck as makeDeckIn,
+  openPhone,
+  signIn as signInPage,
+} from './helpers.js';
 
 test.afterEach(closeEverything);
 
-const FIXTURES = 'tests/fixtures';
 let counter = 0;
 
 function uniqueTitle(): string {
@@ -13,34 +19,13 @@ function uniqueTitle(): string {
   return `Deck ${process.pid} ${Date.now()} ${counter}`;
 }
 
+/** The builder in a desk-sized window. */
 async function signIn(browser: Browser, viewport = { width: 1280, height: 900 }): Promise<Page> {
-  const context = await browser.newContext({ viewport, acceptDownloads: true });
-  const page = await context.newPage();
-  failOnPageErrors(page, { allowFailedRequests: true });
-  await page.goto('/admin');
-  await page.getByLabel('Password').fill('e2e-test-password');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.getByRole('heading', { name: 'Your decks' }).waitFor();
-  return page;
+  return (await signInPage(browser, { viewport, allowFailedRequests: true })).page;
 }
 
-/** Makes a deck through the app's own API, ready to open. */
-async function makeDeck(page: Page, content: Record<string, unknown>): Promise<string> {
-  return page.evaluate(async (fields) => {
-    const response = await fetch('/api/admin/decks', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Deck',
-        theme: { accent: null },
-        region: { country: 'Japan' },
-        moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-        games: [],
-        ...fields,
-      }),
-    });
-    return ((await response.json()) as { deck: { id: string } }).deck.id;
-  }, content);
+function makeDeck(page: Page, content: Record<string, unknown>): Promise<string> {
+  return makeDeckIn(page.context(), { title: 'Deck', ...content });
 }
 
 async function openEditor(page: Page, games: unknown[], title = uniqueTitle()): Promise<string> {
@@ -474,11 +459,6 @@ test.describe('layout and accessibility', () => {
     await page.getByText('Saved', { exact: true }).waitFor();
   }
 
-  async function expectNoProblems(page: Page) {
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
-  }
-
   async function expectNoSideScroll(page: Page) {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -489,12 +469,12 @@ test.describe('layout and accessibility', () => {
     await makeDeck(page, { title: uniqueTitle() });
     await page.reload();
     await page.getByRole('list').first().waitFor();
-    await expectNoProblems(page);
+    await expectNoAccessibilityProblems(page);
 
     await fullEditor(page);
-    await expectNoProblems(page);
+    await expectNoAccessibilityProblems(page);
     for (const opener of await page.locator('details summary').all()) await opener.click();
-    await expectNoProblems(page);
+    await expectNoAccessibilityProblems(page);
   });
 
   for (const width of [390, 768, 1280]) {

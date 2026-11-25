@@ -2,7 +2,7 @@ import maplibregl from 'maplibre-gl';
 import { useEffect, useRef, useState } from 'react';
 import type { Country } from '../../../shared/countries.js';
 import type { Outline, Spot } from '../../../shared/geo.js';
-import { createGameMap } from './gameMap.js';
+import { createGameMap, useMapInstance } from './gameMap.js';
 import { viewLimits } from './streets.js';
 
 /** The status line and button that float over the bottom of the map. */
@@ -22,83 +22,68 @@ export interface PinMapProps {
 }
 
 export default function PinMap({ area, outline, pin, locked, onPick, onFail }: PinMapProps) {
-  const box = useRef<HTMLDivElement>(null);
   const marker = useRef<maplibregl.Marker | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
   const picked = useRef(onPick);
   picked.current = onPick;
-  const failed = useRef(onFail);
-  failed.current = onFail;
   const spot = useRef(pin);
   spot.current = pin;
 
-  useEffect(() => {
-    const element = box.current;
-    if (!element) return;
-    let instance: maplibregl.Map;
-    try {
-      instance = createGameMap(element, area, outline, { padding: PADDING, interactive: true });
-    } catch {
-      failed.current();
-      return;
-    }
-
-    const fitLimits = () => {
-      const { clientWidth, clientHeight } = element;
-      if (clientWidth === 0 || clientHeight === 0) return;
-      instance.setMaxBounds(viewLimits(area.reach, clientWidth, clientHeight, PADDING));
-    };
-    fitLimits();
-
-    // A pan or pinch never gets here, because the map only reports a click when nothing moved.
-    let pending: number | undefined;
-    const cancelPending = () => {
-      window.clearTimeout(pending);
-      pending = undefined;
-    };
-    instance.on('click', (event) => {
-      if (pending !== undefined) {
-        cancelPending();
-        return;
-      }
-      const { lat, lng } = event.lngLat.wrap();
-      pending = window.setTimeout(() => {
-        pending = undefined;
-        picked.current({ lat, lng });
-      }, DOUBLE_TAP_MS);
-    });
-    // A double tap on a phone may zoom without a second click.
-    instance.on('zoomstart', cancelPending);
-
-    // Keyboard users pan with the arrows, zoom with + and -, and drop the pin in the middle.
-    const canvas = instance.getCanvas();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter') return;
-      const { lat, lng } = instance.getCenter().wrap();
-      picked.current({ lat, lng });
-    };
-    canvas.addEventListener('keydown', onKey);
-    canvas.setAttribute('aria-label', `Map of ${area.name}. Tap to drop your pin.`);
-
-    // Keeps the canvas matched to its box when browser toolbars change or the phone turns.
-    const watcher = new ResizeObserver(() => {
-      instance.resize();
+  const box = useMapInstance(
+    (element) => createGameMap(element, area, outline, { padding: PADDING, interactive: true }),
+    (instance, element) => {
+      const fitLimits = () => {
+        const { clientWidth, clientHeight } = element;
+        if (clientWidth === 0 || clientHeight === 0) return;
+        instance.setMaxBounds(viewLimits(area.reach, clientWidth, clientHeight, PADDING));
+      };
       fitLimits();
-    });
-    watcher.observe(element);
-    setMap(instance);
-    return () => {
-      cancelPending();
-      watcher.disconnect();
-      canvas.removeEventListener('keydown', onKey);
-      marker.current = null;
-      setMap(null);
-      instance.remove();
-    };
+
+      // A pan or pinch never gets here, because the map only reports a click when nothing moved.
+      let pending: number | undefined;
+      const cancelPending = () => {
+        window.clearTimeout(pending);
+        pending = undefined;
+      };
+      instance.on('click', (event) => {
+        if (pending !== undefined) {
+          cancelPending();
+          return;
+        }
+        const { lat, lng } = event.lngLat.wrap();
+        pending = window.setTimeout(() => {
+          pending = undefined;
+          picked.current({ lat, lng });
+        }, DOUBLE_TAP_MS);
+      });
+      // A double tap on a phone may zoom without a second click.
+      instance.on('zoomstart', cancelPending);
+
+      // Keyboard users pan with the arrows, zoom with + and -, and drop the pin in the middle.
+      const canvas = instance.getCanvas();
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key !== 'Enter') return;
+        const { lat, lng } = instance.getCenter().wrap();
+        picked.current({ lat, lng });
+      };
+      canvas.addEventListener('keydown', onKey);
+      canvas.setAttribute('aria-label', `Map of ${area.name}. Tap to drop your pin.`);
+      setMap(instance);
+      return {
+        resize: fitLimits,
+        cleanup: () => {
+          cancelPending();
+          canvas.removeEventListener('keydown', onKey);
+          marker.current = null;
+          setMap(null);
+        },
+      };
+    },
+    onFail,
     // Created once per country, however often the game's state arrives. The outline is ready
     // before this appears, and the country's details never change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area.name]);
+    [area.name],
+  );
 
   useEffect(() => {
     if (!map) return;

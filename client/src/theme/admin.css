@@ -180,8 +180,6 @@ html[data-page='desk'] #root {
 /* ---------- Deck list ---------- */
 .deck-rows {
   margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .deck-row {
@@ -222,8 +220,6 @@ html[data-page='desk'] #root {
 
 .desk-rooms ul {
   margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .desk-rooms li {
@@ -262,6 +258,7 @@ html[data-page='desk'] #root {
 .deck-problems ul {
   margin: 8px 0 0;
   padding-left: 20px;
+  list-style: disc;
 }
 
 .ready-line {
@@ -475,13 +472,6 @@ html[data-page='desk'] #root {
   font-size: 14px;
 }
 
-.word-rows,
-.photo-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .word-row {
   align-items: start;
   padding: 8px 0;
@@ -649,8 +639,6 @@ html[data-page='desk'] #root {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
   margin: 0 0 12px;
-  padding: 0;
-  list-style: none;
 }
 
 .caption-card .row-keys {
@@ -790,8 +778,6 @@ html[data-page='desk'] #root {
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 8px;
   margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .extras-item {
@@ -844,8 +830,6 @@ html[data-page='desk'] #root {
   flex-direction: column;
   gap: 8px;
   margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .tip-place-edit {

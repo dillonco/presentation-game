@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef, useState } from 'react';
 import { findCountry } from '../../../shared/countries.js';
+import { useMapInstance } from '../map/gameMap.js';
 import { preferEnglishLabels } from '../map/labels.js';
 import { Field, Key } from './controls.js';
 import { roundCoordinate } from './photos.js';
@@ -34,7 +35,6 @@ export default function LocationPicker({ value, country, onChange, onClose }: {
   onChange: (location: PickedLocation) => void;
   onClose: () => void;
 }) {
-  const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const marker = useRef<maplibregl.Marker | null>(null);
   const reported = useRef(onChange);
@@ -52,13 +52,11 @@ export default function LocationPicker({ value, country, onChange, onClose }: {
     setTextWrong(false);
   }, [lat, lng]);
 
-  useEffect(() => {
-    if (!box.current) return;
-    const area = findCountry(country);
-    let instance: maplibregl.Map;
-    try {
-      instance = new maplibregl.Map({
-        container: box.current,
+  const box = useMapInstance(
+    (container) => {
+      const area = findCountry(country);
+      return new maplibregl.Map({
+        container,
         style: STYLE_URL,
         // Starts on the photo's spot when it has one, and otherwise shows the whole country.
         ...(value
@@ -70,34 +68,31 @@ export default function LocationPicker({ value, country, onChange, onClose }: {
         pitchWithRotate: false,
         fitBoundsOptions: { padding: 24 },
       });
-    } catch {
-      // No graphics support. Pasted coordinates still work.
-      setMapFailed(true);
-      return;
-    }
-    instance.touchZoomRotate.disableRotation();
-    instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    instance.on('style.load', () => preferEnglishLabels(instance));
-    instance.on('error', () => {
-      if (!instance.loaded()) setMapFailed(true);
-    });
-    instance.on('load', () => setMapFailed(false));
-    instance.on('click', (event) => {
-      reported.current({ lat: roundCoordinate(event.lngLat.lat), lng: roundCoordinate(event.lngLat.lng) });
-    });
-    map.current = instance;
-
-    const watcher = new ResizeObserver(() => instance.resize());
-    watcher.observe(box.current);
-    return () => {
-      watcher.disconnect();
-      marker.current = null;
-      map.current = null;
-      instance.remove();
-    };
+    },
+    (instance) => {
+      instance.touchZoomRotate.disableRotation();
+      instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+      instance.on('style.load', () => preferEnglishLabels(instance));
+      instance.on('error', () => {
+        if (!instance.loaded()) setMapFailed(true);
+      });
+      instance.on('load', () => setMapFailed(false));
+      instance.on('click', (event) => {
+        reported.current({ lat: roundCoordinate(event.lngLat.lat), lng: roundCoordinate(event.lngLat.lng) });
+      });
+      map.current = instance;
+      return {
+        cleanup: () => {
+          marker.current = null;
+          map.current = null;
+        },
+      };
+    },
+    // No graphics support. Pasted coordinates still work.
+    () => setMapFailed(true),
     // The map is set up once. Later changes to the location only move the marker, below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country]);
+    [country],
+  );
 
   useEffect(() => {
     if (!map.current || lat === null || lng === null) return;

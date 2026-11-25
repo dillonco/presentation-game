@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
 import type { Country } from '../../../shared/countries.js';
 import { insideOutline, type Spot } from '../../../shared/geo.js';
 import type { ErrorCode, GuestScreen } from '../../../shared/protocol.js';
+import { lazyMap } from '../map/lazy.js';
 import { OutlineMap } from '../map/OutlineMap.js';
 import { useOutline } from '../map/useOutline.js';
 import { toLocalTimes } from '../net/clock.js';
@@ -11,21 +12,12 @@ import { ActionButton, useLockedAction } from '../ui/ActionButton.js';
 import { PhotoThumb } from '../ui/Photo.js';
 import { StatusArea, type StatusContent } from '../ui/StatusArea.js';
 import { TimerStrip } from '../ui/TimerStrip.js';
-import { LookUp, ordinal, stripLabel, useAtDeadline, useHeldUntil, type RoundSession } from './RoundScreens.js';
+import { RoundResult, stripLabel, useAtDeadline, type RoundSession } from './RoundScreens.js';
 
 type GuessData = Extract<GuestScreen, { kind: 'guess' }>;
 type PinRevealData = Extract<GuestScreen, { kind: 'pinReveal' }>;
 
-/** Left out of the first download. If it can't arrive, the outline below still takes a pin. */
-const PinMap = lazy(() =>
-  import('../map/PinMap.js').catch(() => ({
-    default: ({ area, outline, pin, onPick }: Parameters<typeof OutlineMap>[0]) => (
-      <div className="map-fallback">
-        <OutlineMap area={area} outline={outline} pin={pin} onPick={onPick} />
-      </div>
-    ),
-  })),
-);
+const PinMap = lazyMap(() => import('../map/PinMap.js'));
 
 function readDraft(key: string): Spot | null {
   try {
@@ -156,22 +148,14 @@ function pinResultLine(km: number | null): string {
 }
 
 export function PinRevealScreen({ screen, offset }: { screen: PinRevealData; offset: number }) {
-  const revealed = useHeldUntil(screen.endsAt - offset);
-  const { round, result } = screen;
-  if (!revealed) return <LookUp round={round} body="The map is on its way." />;
   return (
-    <main className="sheet">
-      <div className="waiting">
-        <div className="waiting-main">
-          <p className="kicker">{screen.place}</p>
-          <h1 className="notice-title">{pinResultLine(result.km)}</h1>
-          <p className="result-points">+{result.points}</p>
-        </div>
-        <div className="waiting-foot">
-          <span>Total {result.total}</span>
-          <span>{ordinal(result.rank)} place</span>
-        </div>
-      </div>
-    </main>
+    <RoundResult
+      endsAt={screen.endsAt - offset}
+      round={screen.round}
+      waiting="The map is on its way."
+      kicker={screen.place}
+      line={pinResultLine(screen.result.km)}
+      result={screen.result}
+    />
   );
 }

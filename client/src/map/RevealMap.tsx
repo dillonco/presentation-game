@@ -4,7 +4,7 @@ import type { Country } from '../../../shared/countries.js';
 import type { Outline, Spot } from '../../../shared/geo.js';
 import type { RevealPin } from '../../../shared/protocol.js';
 import { PIN_REVEAL } from '../../../shared/reveal.js';
-import { createGameMap } from './gameMap.js';
+import { createGameMap, useMapInstance } from './gameMap.js';
 
 const PADDING = { top: 48, left: 48, right: 48, bottom: 48 };
 /** Room around the closest pins, so their names aren't cut off by the edge of the map. */
@@ -85,57 +85,48 @@ export default function RevealMap({
   endsAt: number;
   onFail: () => void;
 }) {
-  const box = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
-  const failed = useRef(onFail);
-  failed.current = onFail;
   const removed = useRef(false);
 
-  useEffect(() => {
-    if (!box.current) return;
-    removed.current = false;
-    let instance: maplibregl.Map;
-    try {
-      instance = createGameMap(box.current, area, outline, { padding: PADDING, interactive: false });
-    } catch {
-      failed.current();
-      return;
-    }
-    instance.once('load', () => {
-      instance.addSource('links', { type: 'geojson', data: emptyCollection });
-      instance.addLayer({
-        id: 'links',
-        type: 'line',
-        source: 'links',
-        paint: { 'line-color': COLOURS.accent, 'line-width': 1.5, 'line-dasharray': [2, 2] },
+  const box = useMapInstance(
+    (element) => createGameMap(element, area, outline, { padding: PADDING, interactive: false }),
+    (instance) => {
+      removed.current = false;
+      instance.once('load', () => {
+        instance.addSource('links', { type: 'geojson', data: emptyCollection });
+        instance.addLayer({
+          id: 'links',
+          type: 'line',
+          source: 'links',
+          paint: { 'line-color': COLOURS.accent, 'line-width': 1.5, 'line-dasharray': [2, 2] },
+        });
+        instance.addSource('pins', { type: 'geojson', data: emptyCollection });
+        instance.addLayer({
+          id: 'pins',
+          type: 'circle',
+          source: 'pins',
+          paint: {
+            'circle-radius': ['case', ['get', 'close'], 7, 5],
+            'circle-color': COLOURS.pin,
+            'circle-opacity': 0.75,
+            'circle-stroke-color': COLOURS.stroke,
+            'circle-stroke-width': 1.5,
+          },
+        });
+        setMap(instance);
       });
-      instance.addSource('pins', { type: 'geojson', data: emptyCollection });
-      instance.addLayer({
-        id: 'pins',
-        type: 'circle',
-        source: 'pins',
-        paint: {
-          'circle-radius': ['case', ['get', 'close'], 7, 5],
-          'circle-color': COLOURS.pin,
-          'circle-opacity': 0.75,
-          'circle-stroke-color': COLOURS.stroke,
-          'circle-stroke-width': 1.5,
+      return {
+        cleanup: () => {
+          removed.current = true;
+          setMap(null);
         },
-      });
-      setMap(instance);
-    });
-    const watcher = new ResizeObserver(() => instance.resize());
-    watcher.observe(box.current);
-    return () => {
-      watcher.disconnect();
-      removed.current = true;
-      setMap(null);
-      instance.remove();
-    };
+      };
+    },
+    onFail,
     // Created once per country, however often the game's state arrives. The outline is ready
     // before this appears, and the country's details never change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area.name]);
+    [area.name],
+  );
 
   // Every update from the server is a new copy of these, so they're compared by what they hold.
   const pinsKey = JSON.stringify(pins);

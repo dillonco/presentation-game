@@ -28,6 +28,7 @@ export interface RoomSummary {
 }
 
 export const api = {
+  me: () => call<{ signedIn: boolean }>('/api/admin/me'),
   /** `sampleDeck` says whether this server offers the sample deck, which only a development one does. */
   decks: () => call<{ decks: DeckSummary[]; sampleDeck?: boolean }>('/api/admin/decks'),
   deck: (id: string) => call<{ deck: StoredDeck }>(`/api/admin/decks/${id}`).then((result) => result.deck),

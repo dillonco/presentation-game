@@ -1,17 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import type { TipView } from '../../../shared/protocol.js';
+import { lazyMap } from '../map/lazy.js';
 
 type TipsMapProps = Parameters<typeof import('../map/TipsMap.js').default>[0];
 
-/** If the map engine can't arrive, it says so and the page carries on as a list. */
-const LazyTipsMap = lazy(() =>
-  import('../map/TipsMap.js').catch(() => ({
-    default: ({ onFail }: TipsMapProps) => {
-      useEffect(onFail, [onFail]);
-      return <></>;
-    },
-  })),
-);
+const LazyTipsMap = lazyMap(() => import('../map/TipsMap.js'));
 
 export function hasPlaces(tips: readonly TipView[]): boolean {
   return tips.some((tip) => tip.places.length > 0);

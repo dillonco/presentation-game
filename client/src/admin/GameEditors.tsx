@@ -444,6 +444,55 @@ function ExtraPhotos({ name, extras, uploads, onChange }: {
   );
 }
 
+interface PhotoItem {
+  image: string;
+  extras?: string[];
+}
+
+/**
+ * The parts every photo game's rows share: the thumbnail, the move and remove keys, and the
+ * extra photos. Rows are found by their photo, so an edit can't land on a row that just moved.
+ */
+function photoRows<G extends { items: PhotoItem[] }>(
+  game: G,
+  uploads: PhotoUploads,
+  onChange: (update: (game: G) => G) => void,
+) {
+  type Item = G['items'][number];
+  const setItems = (change: (items: Item[]) => Item[]) =>
+    onChange((current) => ({ ...current, items: change(current.items) }));
+  const update = (image: string, change: (item: Item) => Item) =>
+    setItems((items) => items.map((item) => (item.image === image ? change(item) : item)));
+  return {
+    update,
+    add: (item: Item) => setItems((items) => [...items, item]),
+    thumb: (item: Item, number: number) => (
+      <MediaThumb id={item.image} alt={`${isVideoId(item.image) ? 'Video' : 'Photo'} ${number}`} />
+    ),
+    keys: (item: Item, index: number, onRemoved?: () => void) => (
+      <RowKeys
+        name={`photo ${index + 1}`}
+        index={index}
+        count={game.items.length}
+        locked={uploads.running > 0}
+        onMove={(to) => setItems((items) => moved(items, index, to))}
+        onRemove={() => {
+          setItems((items) => items.filter((other) => other.image !== item.image));
+          onRemoved?.();
+        }}
+      />
+    ),
+    extras: (item: Item, number: number) => (
+      <ExtraPhotos
+        name={`photo ${number}`}
+        extras={item.extras ?? []}
+        uploads={uploads}
+        onChange={(change) => update(item.image, (current) => ({ ...current, extras: change(current.extras ?? []) }))}
+      />
+    ),
+  };
+}
+
 export function GeoEditor({ game, country, uploads, onChange }: {
   game: GeoGame;
   country: string;
@@ -453,13 +502,9 @@ export function GeoEditor({ game, country, uploads, onChange }: {
   const [picking, setPicking] = useState<string | null>(null);
   const [fromPhoto, setFromPhoto] = useState<ReadonlySet<string>>(new Set());
   const area = findCountry(country);
-
-  const setItem = (image: string, change: Partial<GeoGame['items'][number]>) => {
-    onChange((current) => ({
-      ...current,
-      items: current.items.map((item) => (item.image === image ? { ...item, ...change } : item)),
-    }));
-  };
+  const rows = photoRows(game, uploads, onChange);
+  const setItem = (image: string, change: Partial<GeoGame['items'][number]>) =>
+    rows.update(image, (item) => ({ ...item, ...change }));
 
   return (
     <>
@@ -470,7 +515,7 @@ export function GeoEditor({ game, country, uploads, onChange }: {
           const outside = located && area && !insideCountry(area, item.lat!, item.lng!);
           return (
             <li key={item.image} className="photo-row">
-              <MediaThumb id={item.image} alt={`${isVideoId(item.image) ? 'Video' : 'Photo'} ${number}`} />
+              {rows.thumb(item, number)}
               <div className="photo-fields">
                 <Field label={`Place name, photo ${number}`}>
                   {(id) => (
@@ -494,34 +539,9 @@ export function GeoEditor({ game, country, uploads, onChange }: {
                   context={`Photo ${number}`}
                   onPress={() => setPicking((current) => (current === item.image ? null : item.image))}
                 />
-                <ExtraPhotos
-                  name={`photo ${number}`}
-                  extras={item.extras ?? []}
-                  uploads={uploads}
-                  onChange={(update) =>
-                    onChange((current) => ({
-                      ...current,
-                      items: current.items.map((other) =>
-                        other.image === item.image ? { ...other, extras: update(other.extras ?? []) } : other,
-                      ),
-                    }))
-                  }
-                />
+                {rows.extras(item, number)}
               </div>
-              <RowKeys
-                name={`photo ${number}`}
-                index={index}
-                count={game.items.length}
-                locked={uploads.running > 0}
-                onMove={(to) => onChange((current) => ({ ...current, items: moved(current.items, index, to) }))}
-                onRemove={() => {
-                  onChange((current) => ({
-                    ...current,
-                    items: current.items.filter((other) => other.image !== item.image),
-                  }));
-                  setPicking((current) => (current === item.image ? null : current));
-                }}
-              />
+              {rows.keys(item, index, () => setPicking((current) => (current === item.image ? null : current)))}
               {picking === item.image ? (
                 <div className="photo-picker">
                   <Suspense fallback={<p className="desk-hint">Loading the map…</p>}>
@@ -550,13 +570,7 @@ export function GeoEditor({ game, country, uploads, onChange }: {
         uploads={uploads}
         onAdded={(photo) => {
           if (photo.location) setFromPhoto((current) => new Set(current).add(photo.id));
-          onChange((current) => ({
-            ...current,
-            items: [
-              ...current.items,
-              { image: photo.id, label: '', lat: photo.location?.lat ?? null, lng: photo.location?.lng ?? null },
-            ],
-          }));
+          rows.add({ image: photo.id, label: '', lat: photo.location?.lat ?? null, lng: photo.location?.lng ?? null });
         }}
       />
       <Timing
@@ -576,6 +590,7 @@ export function CaptionEditor({ game, uploads, onChange }: {
   uploads: PhotoUploads;
   onChange: (update: (game: CaptionGame) => CaptionGame) => void;
 }) {
+  const rows = photoRows(game, uploads, onChange);
   return (
     <>
       <ol className="caption-grid">
@@ -583,33 +598,9 @@ export function CaptionEditor({ game, uploads, onChange }: {
           const number = index + 1;
           return (
             <li key={item.image} className="caption-card">
-              <MediaThumb id={item.image} alt={`${isVideoId(item.image) ? 'Video' : 'Photo'} ${number}`} />
-              <RowKeys
-                name={`photo ${number}`}
-                index={index}
-                count={game.items.length}
-                locked={uploads.running > 0}
-                onMove={(to) => onChange((current) => ({ ...current, items: moved(current.items, index, to) }))}
-                onRemove={() =>
-                  onChange((current) => ({
-                    ...current,
-                    items: current.items.filter((other) => other.image !== item.image),
-                  }))
-                }
-              />
-              <ExtraPhotos
-                name={`photo ${number}`}
-                extras={item.extras ?? []}
-                uploads={uploads}
-                onChange={(update) =>
-                  onChange((current) => ({
-                    ...current,
-                    items: current.items.map((other) =>
-                      other.image === item.image ? { ...other, extras: update(other.extras ?? []) } : other,
-                    ),
-                  }))
-                }
-              />
+              {rows.thumb(item, number)}
+              {rows.keys(item, index)}
+              {rows.extras(item, number)}
             </li>
           );
         })}
@@ -617,7 +608,7 @@ export function CaptionEditor({ game, uploads, onChange }: {
       <PhotoDrop
         room={MAX_ITEMS_PER_GAME - game.items.length}
         uploads={uploads}
-        onAdded={(photo) => onChange((current) => ({ ...current, items: [...current.items, { image: photo.id }] }))}
+        onAdded={(photo) => rows.add({ image: photo.id })}
       />
       <Timing
         game={game}
@@ -642,12 +633,8 @@ export function ChoiceEditor({ game, uploads, onChange }: {
   onChange: (update: (game: ChoiceGame) => ChoiceGame) => void;
 }) {
   const base = useId();
-  const updateItem = (image: string, update: (item: ChoiceGame['items'][number]) => ChoiceGame['items'][number]) => {
-    onChange((current) => ({
-      ...current,
-      items: current.items.map((item) => (item.image === image ? update(item) : item)),
-    }));
-  };
+  const rows = photoRows(game, uploads, onChange);
+  const updateItem = rows.update;
 
   return (
     <>
@@ -656,7 +643,7 @@ export function ChoiceEditor({ game, uploads, onChange }: {
           const number = index + 1;
           return (
             <li key={item.image} className="photo-row">
-              <MediaThumb id={item.image} alt={`${isVideoId(item.image) ? 'Video' : 'Photo'} ${number}`} />
+              {rows.thumb(item, number)}
               <div className="photo-fields">
                 <Field label={`Question, photo ${number}`} hint="Optional. Without one, the TV asks which answer is right.">
                   {(id) => (
@@ -706,26 +693,9 @@ export function ChoiceEditor({ game, uploads, onChange }: {
                   })}
                 </fieldset>
                 <p className="desk-hint">Guests see the four in a shuffled order.</p>
-                <ExtraPhotos
-                  name={`photo ${number}`}
-                  extras={item.extras ?? []}
-                  uploads={uploads}
-                  onChange={(update) => updateItem(item.image, (current) => ({ ...current, extras: update(current.extras ?? []) }))}
-                />
+                {rows.extras(item, number)}
               </div>
-              <RowKeys
-                name={`photo ${number}`}
-                index={index}
-                count={game.items.length}
-                locked={uploads.running > 0}
-                onMove={(to) => onChange((current) => ({ ...current, items: moved(current.items, index, to) }))}
-                onRemove={() =>
-                  onChange((current) => ({
-                    ...current,
-                    items: current.items.filter((other) => other.image !== item.image),
-                  }))
-                }
-              />
+              {rows.keys(item, index)}
             </li>
           );
         })}
@@ -733,7 +703,7 @@ export function ChoiceEditor({ game, uploads, onChange }: {
       <PhotoDrop
         room={MAX_ITEMS_PER_GAME - game.items.length}
         uploads={uploads}
-        onAdded={(photo) => onChange((current) => ({ ...current, items: [...current.items, emptyChoice(photo.id)] }))}
+        onAdded={(photo) => rows.add(emptyChoice(photo.id))}
       />
       <Timing
         game={game}

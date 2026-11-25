@@ -1,7 +1,18 @@
-import { readFileSync } from 'node:fs';
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
-import { closeEverything, failOnPageErrors, joinAs, newContext, PHONE } from './helpers.js';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  closeEverything,
+  expectNoAccessibilityProblems,
+  failOnPageErrors,
+  joinAs,
+  mapPhone,
+  mapReady,
+  newContext,
+  PHONE,
+  press,
+  startMapGame,
+  tapJapan,
+  toGuessing,
+} from './helpers.js';
 
 test.afterEach(closeEverything);
 
@@ -12,96 +23,6 @@ const SIZES = [
   { width: 430, height: 932 },
 ];
 
-const contexts: BrowserContext[] = [];
-test.afterEach(async () => {
-  await Promise.all(contexts.splice(0).map((context) => context.close().catch(() => undefined)));
-});
-
-/** A blank street style, so these tests don't depend on the map service being up. */
-async function blankStreets(context: BrowserContext): Promise<void> {
-  await context.route('https://tiles.openfreemap.org/**', (route) =>
-    route.fulfill({ json: { version: 8, sources: {}, layers: [] } }),
-  );
-}
-
-async function startMapGame(browser: Browser, settings: Record<string, number> = {}): Promise<{ tv: Page; room: string }> {
-  // The shared helper also keeps the TV's GIFs and word clips off the internet.
-  const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
-  await blankStreets(context);
-  const tv = await context.newPage();
-  failOnPageErrors(tv);
-  await tv.goto('/admin');
-  await tv.getByLabel('Password').fill('e2e-test-password');
-  await tv.getByRole('button', { name: 'Sign in' }).click();
-  await tv.getByRole('heading', { name: 'Your decks' }).waitFor();
-  const upload = await context.request.post('/api/admin/images', {
-    headers: { 'content-type': 'image/jpeg' },
-    data: readFileSync('tests/fixtures/plain.jpg'),
-  });
-  const { id: image } = (await upload.json()) as { id: string };
-  const created = await context.request.post('/api/admin/decks', {
-    data: {
-      title: 'Places',
-      theme: { accent: null },
-      region: { country: 'Japan' },
-      moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-      games: [{ type: 'geo', settings, items: [{ image, label: 'Fushimi Inari', lat: 34.9671, lng: 135.7727 }] }],
-    },
-  });
-  const { deck } = (await created.json()) as { deck: { id: string } };
-  const started = await context.request.post('/api/admin/rooms', { data: { deckId: deck.id } });
-  const { id } = (await started.json()) as { id: string };
-  await tv.goto(`/host/${id}`);
-  await tv.getByText('Scan to join').waitFor();
-  return { tv, room: id };
-}
-
-async function phone(browser: Browser, room: string, name: string, size: { width: number; height: number } = PHONE.viewport): Promise<Page> {
-  const context = await browser.newContext({ ...PHONE, viewport: size });
-  contexts.push(context);
-  await blankStreets(context);
-  const page = await context.newPage();
-  failOnPageErrors(page);
-  await page.goto(`/j/${room}`);
-  await joinAs(page, name);
-  return page;
-}
-
-async function press(tv: Page, key: string): Promise<void> {
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press(key);
-}
-
-async function toGuessing(tv: Page): Promise<void> {
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Where was this?' }).waitFor();
-  await press(tv, 'Space');
-  await tv.getByText('Drop a pin on your phone.').waitFor();
-}
-
-/** The map is ready to take a tap once it has drawn. */
-async function mapReady(page: Page): Promise<Locator> {
-  const canvas = page.locator('.map-stage .maplibregl-canvas');
-  await canvas.waitFor({ timeout: 20_000 });
-  await page.waitForFunction(() => {
-    const map = document.querySelector<HTMLCanvasElement>('.maplibregl-canvas');
-    return !!map && map.width > 0;
-  });
-  // Lets the opening view settle, so a tap lands where the test means it to.
-  await page.waitForTimeout(300);
-  return canvas;
-}
-
-/** Roughly mainland Japan, on the opening view of every phone size here. */
-async function tapJapan(page: Page): Promise<void> {
-  const canvas = await mapReady(page);
-  const box = (await canvas.boundingBox())!;
-  const foot = (await page.locator('.map-foot').boundingBox())!;
-  const shownHeight = foot.y - box.y;
-  await canvas.tap({ position: { x: box.width * 0.56, y: shownHeight * 0.52 } });
-  await expect(page.locator('.pin-mark')).toBeVisible();
-}
-
 /** Inland, up and to the right of the pin from tapJapan, and clear of the pin itself. */
 async function tapBesidePin(page: Page): Promise<void> {
   const pin = (await page.locator('.pin-mark').boundingBox())!;
@@ -111,7 +32,7 @@ async function tapBesidePin(page: Page): Promise<void> {
 test.describe('the map on a phone', () => {
   test('fills the screen right to the bottom edge, at every size', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const phones = await Promise.all(SIZES.map((size, index) => phone(browser, room, `P${index}`, size)));
+    const phones = await Promise.all(SIZES.map((size, index) => mapPhone(browser, room, `P${index}`, size)));
     await toGuessing(tv);
     for (const [index, page] of phones.entries()) {
       const canvas = await mapReady(page);
@@ -127,7 +48,7 @@ test.describe('the map on a phone', () => {
 
   test('stays matched to its box when the screen changes size', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     const canvas = await mapReady(page);
     for (const size of [{ width: 390, height: 600 }, { width: 700, height: 340 }, { width: 390, height: 844 }]) {
@@ -141,7 +62,7 @@ test.describe('the map on a phone', () => {
 
   test('a tap drops the pin, another moves it, and Lock in sends it', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await expect(page.getByText('Tap to drop your pin.')).toBeVisible();
     await tapJapan(page);
@@ -159,7 +80,7 @@ test.describe('the map on a phone', () => {
 
   test('the pin can be dragged, but only inside the country', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     const pin = page.locator('.pin-mark');
@@ -211,7 +132,7 @@ test.describe('the map on a phone', () => {
 
   test('panning or double-tapping never places a pin', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     const canvas = await mapReady(page);
     const box = (await canvas.boundingBox())!;
@@ -230,7 +151,7 @@ test.describe('the map on a phone', () => {
 
   test('zoom keys work, and Show all of Japan comes back to the start', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     const pin = page.locator('.pin-mark');
@@ -251,7 +172,7 @@ test.describe('the map on a phone', () => {
 
   test('a tap off the country is refused, with a message, and keeps the pin', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     const canvas = await mapReady(page);
     const box = (await canvas.boundingBox())!;
@@ -265,7 +186,7 @@ test.describe('the map on a phone', () => {
 
   test('Lock in pin with no pin says what to do, and no button moves', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await mapReady(page);
     const lock = page.getByRole('button', { name: /pin/ }).last();
@@ -282,7 +203,7 @@ test.describe('the map on a phone', () => {
 
   test('once locked, tapping the map does nothing until Move pin', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     await page.getByRole('button', { name: 'Lock in pin' }).tap();
@@ -300,7 +221,7 @@ test.describe('the map on a phone', () => {
 
   test('rapid taps on Lock in count once', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     const lock = page.getByRole('button', { name: 'Lock in pin' });
@@ -311,7 +232,7 @@ test.describe('the map on a phone', () => {
 
   test('a refresh keeps an unsent pin, and a locked one', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     await page.reload();
@@ -328,7 +249,7 @@ test.describe('the map on a phone', () => {
 
   test('a pin never locked in still counts when time runs out', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser, { guessSeconds: 10 });
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
     await expect(tv.getByRole('heading', { name: 'Fushimi Inari' })).toBeVisible({ timeout: 25_000 });
@@ -338,7 +259,7 @@ test.describe('the map on a phone', () => {
 
   test('the photo opens larger and closes again', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await mapReady(page);
     await page.getByRole('button', { name: 'Enlarge Photo 1 of 1' }).tap();
@@ -349,19 +270,17 @@ test.describe('the map on a phone', () => {
 
   test('passes the accessibility checks', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const page = await phone(browser, room, 'Alex');
+    const page = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(page);
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.target}`)).toEqual([]);
+    await expectNoAccessibilityProblems(page);
   });
 });
 
 test.describe('without a working map', () => {
   test('the outline still draws and takes a pin when street data is down', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const context = await browser.newContext(PHONE);
-    contexts.push(context);
+    const context = await newContext(browser, PHONE);
     await context.route('https://tiles.openfreemap.org/**', (route) => route.abort());
     const page = await context.newPage();
     failOnPageErrors(page, { allowFailedRequests: true });
@@ -375,8 +294,7 @@ test.describe('without a working map', () => {
 
   test('a phone with no graphics support gets the tappable outline', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const context = await browser.newContext(PHONE);
-    contexts.push(context);
+    const context = await newContext(browser, PHONE);
     await context.addInitScript(() => {
       const real = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
@@ -412,8 +330,8 @@ test.describe('without a working map', () => {
 test.describe('the reveal on the TV', () => {
   test('flies to the real spot, then names the closest', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const alex = await phone(browser, room, 'Alex');
-    const sam = await phone(browser, room, 'Sam');
+    const alex = await mapPhone(browser, room, 'Alex');
+    const sam = await mapPhone(browser, room, 'Sam');
     await toGuessing(tv);
     await tapJapan(alex);
     await alex.getByRole('button', { name: 'Lock in pin' }).tap();
@@ -432,13 +350,12 @@ test.describe('the reveal on the TV', () => {
 
     await expect(alex.getByText(/ away$|Right on the spot/)).toBeVisible({ timeout: 15_000 });
     await expect(alex.getByText('Fushimi Inari')).toBeVisible();
-    const results = await new AxeBuilder({ page: tv }).exclude('.maplibregl-canvas').analyze();
-    expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.target}`)).toEqual([]);
+    await expectNoAccessibilityProblems(tv, '.maplibregl-canvas');
   });
 
   test('Space skips to the end, then moves on', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const alex = await phone(browser, room, 'Alex');
+    const alex = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(alex);
     await alex.getByRole('button', { name: 'Lock in pin' }).tap();
@@ -455,7 +372,7 @@ test.describe('the reveal on the TV', () => {
 
   test('copes with nobody placing a pin', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const alex = await phone(browser, room, 'Alex');
+    const alex = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await press(tv, 's');
     await expect(tv.getByText('No pins this time.')).toBeVisible({ timeout: 10_000 });
@@ -464,7 +381,7 @@ test.describe('the reveal on the TV', () => {
 
   test('a refreshed TV lands straight on the finished reveal', async ({ browser }) => {
     const { tv, room } = await startMapGame(browser);
-    const alex = await phone(browser, room, 'Alex');
+    const alex = await mapPhone(browser, room, 'Alex');
     await toGuessing(tv);
     await tapJapan(alex);
     await alex.getByRole('button', { name: 'Lock in pin' }).tap();
@@ -481,8 +398,7 @@ test.describe('the reveal on the TV', () => {
 
 test('the phone downloads no map code before it joins a game', async ({ browser }) => {
   const { room } = await startMapGame(browser);
-  const context = await browser.newContext(PHONE);
-  contexts.push(context);
+  const context = await newContext(browser, PHONE);
   const page = await context.newPage();
   const scripts: string[] = [];
   page.on('request', (request) => {

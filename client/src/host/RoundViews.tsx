@@ -8,6 +8,7 @@ import type { WordClip } from '../../../shared/youtube.js';
 import { TvPhoto } from '../ui/Photo.js';
 import { YouTubeClip, type ClipState } from '../ui/YouTubeClip.js';
 import { GifCard } from './GifCard.js';
+import { useElapsed } from '../ui/reveal.js';
 import { formatSeconds, Sunbar, useCountdown } from '../ui/Sunbar.js';
 
 const PAGE_SIZE = 8;
@@ -95,7 +96,8 @@ function RoundHeader({ round, timer, offset }: { round: RoundInfo; timer: TimerV
   );
 }
 
-function namesTier(count: number): string {
+/** Smaller names as the room fills, so everyone still fits. */
+export function namesTier(count: number): string {
   if (count <= 18) return 'tier-1';
   if (count <= 32) return 'tier-2';
   return 'tier-3';
@@ -309,18 +311,6 @@ export function PickView({
   );
 }
 
-/** How far into a timed reveal the TV is. Once it's over, or skipped, everything shows. */
-function useRevealElapsed(startedAt: number, endsAt: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (Date.now() >= endsAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, [endsAt]);
-  const current = Math.max(now, Date.now());
-  return current >= endsAt ? Number.POSITIVE_INFINITY : current - startedAt;
-}
-
 function rightLine(right: readonly string[], answered: number): string {
   if (answered === 0) return 'Nobody answered this time';
   if (right.length === 0) return 'Nobody got it';
@@ -336,7 +326,7 @@ export function PickRevealView({
   screen: Extract<HostScreen, { kind: 'pickReveal' }>;
   offset: number;
 }) {
-  const elapsed = useRevealElapsed(screen.startedAt - offset, screen.endsAt - offset);
+  const elapsed = useElapsed(screen.startedAt - offset, screen.endsAt - offset);
   const countsShown = elapsed >= CHOICE_REVEAL.countsAtMs;
   const answerShown = elapsed >= CHOICE_REVEAL.answerAtMs;
   const namesShown = elapsed >= CHOICE_REVEAL.namesAtMs;
@@ -532,15 +522,8 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
 
 /** Rows arrive one at a time. Timed from the server, so a refreshed TV picks up where it was. */
 function useVisibleRows(rows: readonly RevealRow[], startedAt: number, endsAt: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (Date.now() >= endsAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, [endsAt]);
-  const current = Math.max(now, Date.now());
-  if (current >= endsAt) return rows.length;
-  const elapsed = current - startedAt;
+  const elapsed = useElapsed(startedAt, endsAt);
+  if (elapsed === Number.POSITIVE_INFINITY) return rows.length;
   return Math.max(1, revealRowTimes(rows).filter((time) => time <= elapsed).length);
 }
 

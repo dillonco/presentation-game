@@ -6,18 +6,28 @@ import { mediaUrl, videoUrl } from '../theme/games.js';
 const FIRST_RETRY_MS = 1500;
 const LONGEST_RETRY_MS = 15_000;
 
+/** Tries again later, waiting twice as long each time up to a limit. */
+function useRetry(): { attempt: number; retryLater: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const retry = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(retry.current), []);
+  const retryLater = () => {
+    window.clearTimeout(retry.current);
+    const wait = Math.min(LONGEST_RETRY_MS, FIRST_RETRY_MS * 2 ** attempt);
+    retry.current = window.setTimeout(() => setAttempt((current) => current + 1), wait);
+  };
+  return { attempt, retryLater };
+}
+
 /**
  * Keeps trying in the background on a bad connection, because the game carries on without the
  * photo. A photo this browser already has appears at once, with no fade.
  */
 function useRetryingPhoto(image: string, size: 'full' | 'small') {
-  const [attempt, setAttempt] = useState(0);
+  const { attempt, retryLater } = useRetry();
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [instant, setInstant] = useState(false);
-  const retry = useRef<number | undefined>(undefined);
-
-  useEffect(() => () => window.clearTimeout(retry.current), []);
 
   const ref = useCallback((element: HTMLImageElement | null) => {
     if (element?.complete && element.naturalWidth > 0) {
@@ -41,9 +51,7 @@ function useRetryingPhoto(image: string, size: 'full' | 'small') {
     },
     onError: () => {
       setFailed(true);
-      window.clearTimeout(retry.current);
-      const wait = Math.min(LONGEST_RETRY_MS, FIRST_RETRY_MS * 2 ** attempt);
-      retry.current = window.setTimeout(() => setAttempt((current) => current + 1), wait);
+      retryLater();
     },
   };
 }
@@ -53,11 +61,8 @@ function useRetryingPhoto(image: string, size: 'full' | 'small') {
  * and the browser allows it, and plays silently otherwise rather than not at all.
  */
 function TvVideo({ image, alt, sound }: { image: string; alt: string; sound: boolean }) {
-  const [attempt, setAttempt] = useState(0);
+  const { attempt, retryLater } = useRetry();
   const video = useRef<HTMLVideoElement>(null);
-  const retry = useRef<number | undefined>(undefined);
-
-  useEffect(() => () => window.clearTimeout(retry.current), []);
 
   useEffect(() => {
     const element = video.current;
@@ -81,11 +86,7 @@ function TvVideo({ image, alt, sound }: { image: string; alt: string; sound: boo
       loop
       playsInline
       preload="auto"
-      onError={() => {
-        window.clearTimeout(retry.current);
-        const wait = Math.min(LONGEST_RETRY_MS, FIRST_RETRY_MS * 2 ** attempt);
-        retry.current = window.setTimeout(() => setAttempt((current) => current + 1), wait);
-      }}
+      onError={retryLater}
     />
   );
 }
@@ -99,23 +100,9 @@ export function TvPhoto({ image, alt }: { image: string; alt: string }) {
       </figure>
     );
   }
-  return <TvStill image={image} alt={alt} />;
-}
-
-function TvStill({ image, alt }: { image: string; alt: string }) {
-  const photo = useRetryingPhoto(image, 'full');
   return (
     <figure className="tv-photo">
-      <img
-        ref={photo.ref}
-        src={photo.src}
-        alt={alt}
-        className={photo.className}
-        style={photo.style}
-        onLoad={photo.onLoad}
-        onError={photo.onError}
-      />
-      {photo.failed && !photo.loaded ? <p className="photo-missing">The photo is on its way</p> : null}
+      <Still image={image} alt={alt} Note="p" />
     </figure>
   );
 }
@@ -126,10 +113,10 @@ function TvStill({ image, alt }: { image: string; alt: string }) {
  */
 export function GalleryPhoto({ image, alt, sound = false }: { image: string; alt: string; sound?: boolean }) {
   if (isVideoId(image)) return <TvVideo image={image} alt={alt} sound={sound && !isMuted()} />;
-  return <GalleryStill image={image} alt={alt} />;
+  return <Still image={image} alt={alt} Note="span" />;
 }
 
-function GalleryStill({ image, alt }: { image: string; alt: string }) {
+function Still({ image, alt, Note }: { image: string; alt: string; Note: 'p' | 'span' }) {
   const photo = useRetryingPhoto(image, 'full');
   return (
     <>
@@ -142,7 +129,7 @@ function GalleryStill({ image, alt }: { image: string; alt: string }) {
         onLoad={photo.onLoad}
         onError={photo.onError}
       />
-      {photo.failed && !photo.loaded ? <span className="photo-missing">The photo is on its way</span> : null}
+      {photo.failed && !photo.loaded ? <Note className="photo-missing">The photo is on its way</Note> : null}
     </>
   );
 }

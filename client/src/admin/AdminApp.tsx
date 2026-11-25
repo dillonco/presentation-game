@@ -3,6 +3,7 @@ import '../theme/components.css';
 import '../theme/phone.css';
 import '../theme/admin.css';
 import { ActionButton, useLockedAction } from '../ui/ActionButton.js';
+import { api } from './api.js';
 import { DeckEditor } from './DeckEditor.js';
 import { DeckList } from './DeckList.js';
 import { PhoneShell } from '../ui/PhoneShell.js';
@@ -81,9 +82,9 @@ export default function AdminApp() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   const refresh = useCallback(() => {
-    void fetch('/api/admin/me')
-      .then((response) => response.json())
-      .then((data: { signedIn: boolean }) => {
+    void api
+      .me()
+      .then((data) => {
         const next = safeNext();
         if (data.signedIn && next) window.location.replace(next);
         else setSignedIn(data.signedIn);

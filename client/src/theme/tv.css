@@ -124,9 +124,6 @@ html[data-surface='panel'] body {
   align-content: start;
   gap: 0 2.5rem;
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
   overflow: hidden;
 }
 
@@ -242,15 +239,6 @@ html[data-surface='panel'] body {
   gap: 0.75rem;
 }
 
-.tv-rejoin-text h2 {
-  margin: 0;
-  font-weight: inherit;
-}
-
-.tv-rejoin-text p {
-  margin: 0;
-}
-
 .tv-rejoin-text .tv-key {
   margin-top: 1rem;
 }
@@ -344,10 +332,7 @@ html[data-surface='panel'] body {
 
 .tv-panel-list {
   flex: 1;
-  margin: 0;
-  padding: 0;
   overflow-y: auto;
-  list-style: none;
 }
 
 .tv-panel-list li {
@@ -543,10 +528,7 @@ html[data-surface='panel'] body {
   display: grid;
   align-content: start;
   gap: 0 3rem;
-  margin: 0;
-  padding: 0;
   overflow: hidden;
-  list-style: none;
   border-top: 1px solid var(--panel-hair);
 }
 
@@ -736,8 +718,6 @@ button.entry:focus-visible {
   flex-direction: column;
   gap: 0.75rem;
   margin: 0.5rem 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .choice {
@@ -906,10 +886,8 @@ button.entry:focus-visible {
 .board {
   flex: 1;
   min-height: 0;
-  margin: 0;
   padding: 0.5rem 0 0;
   overflow: hidden;
-  list-style: none;
 }
 
 .board-row {
@@ -995,12 +973,6 @@ button.entry:focus-visible {
   font-size: 3rem;
   font-weight: 500;
   line-height: 1.15;
-}
-
-.pin-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .pin-row {
@@ -1108,8 +1080,6 @@ button.entry:focus-visible {
   gap: 2.5rem;
   height: 29rem;
   margin: 2rem auto 1.75rem;
-  padding: 0;
-  list-style: none;
 }
 
 .podium-slot {
@@ -1216,8 +1186,6 @@ button.entry:focus-visible {
   gap: 0.25rem;
   min-height: 0;
   margin: 1.25rem 0 0;
-  padding: 0;
-  list-style: none;
   font-size: 3rem;
   line-height: 1.2;
 }
@@ -1325,9 +1293,6 @@ button.entry:focus-visible {
   grid-template-rows: repeat(var(--list-rows, 4), auto);
   grid-auto-flow: column;
   column-gap: 4rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .final-list .board-row {
@@ -1415,7 +1380,7 @@ button.entry:focus-visible {
   margin-top: 3rem;
 }
 
-/* A box behind the board, so the scores read against the picture, clear of the title above. */
+/* A box behind the board, so the scores read against the sky, clear of the title above. */
 .tv[data-screen='standings'] .board {
   margin-top: var(--text-box-gap);
   padding: 0.5rem 2rem 0;
@@ -1462,12 +1427,12 @@ button.entry:focus-visible {
 }
 
 /*
- * Boxes behind the smaller words, so they read against the film stills. Each box is a
+ * Boxes behind the smaller words, so they read against the painted sky. Each box is a
  * translucent, frosted panel that hugs its own text, with real padding, so neighbouring
  * boxes keep a gap between them instead of running into each other.
  *
  * Big titles, the player count and the QR code don't get one: they're large enough to read
- * with a soft shadow, and a slab behind them hides the picture for no gain.
+ * with a soft shadow, and a slab behind them hides the sky for no gain.
  */
 .tv {
   --text-box: rgba(10, 12, 28, 0.5);
@@ -1487,7 +1452,7 @@ button.entry:focus-visible {
   backdrop-filter: var(--text-box-blur);
 }
 
-/* Big words stand on the picture with a soft shadow instead. */
+/* Big words stand on the sky with a soft shadow instead. */
 .tv .tv-title,
 .tv .tv-count,
 .title-card .title-numeral,
@@ -1582,9 +1547,7 @@ button.entry:focus-visible {
   min-height: 0;
   display: grid;
   gap: 2rem;
-  margin: 0;
   padding: 0 0 1rem;
-  list-style: none;
 }
 
 .gallery-grid.count-1 { grid-template-columns: 1fr; }
@@ -1754,9 +1717,6 @@ button.entry:focus-visible {
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
   gap: 1.25rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .tips-list.many {

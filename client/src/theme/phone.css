@@ -149,30 +149,6 @@ html[data-surface='paper'] body {
   line-height: 1;
 }
 
-/* The one part that scrolls, so a long list can never squeeze the button above it. */
-.admin-rooms {
-  flex: 1;
-  min-height: 0;
-  margin-top: 32px;
-  overflow-y: auto;
-}
-
-.admin-rooms ul {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-rooms li {
-  border-top: 1px solid var(--hair);
-}
-
-.admin-rooms a {
-  display: block;
-  padding: 12px 0;
-  color: var(--ink);
-}
-
 @media (max-height: 480px) {
   .masthead {
     padding-bottom: 8px;
@@ -471,15 +447,13 @@ textarea.round-field {
   bottom: calc(128px + env(safe-area-inset-bottom, 0px));
 }
 
-.map-stage .maplibregl-ctrl-attrib,
-.tv-map .maplibregl-ctrl-attrib {
+.map-stage .maplibregl-ctrl-attrib {
   background: rgba(245, 242, 234, 0.9);
   color: #66635a;
   font-size: 11px;
 }
 
-.map-stage .maplibregl-ctrl-attrib a,
-.tv-map .maplibregl-ctrl-attrib a {
+.map-stage .maplibregl-ctrl-attrib a {
   color: #66635a;
   text-decoration: underline;
 }
@@ -613,9 +587,6 @@ textarea.round-field {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .tips-phone-card {
@@ -676,8 +647,6 @@ textarea.round-field {
   flex-wrap: wrap;
   gap: 8px;
   margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
 }
 
 .tips-phone-places a {

@@ -1,75 +1,33 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { io, type Socket } from 'socket.io-client';
-import { closeEverything, failOnPageErrors, joinAs, newContext, PHONE } from './helpers.js';
+import {
+  closeEverything,
+  expectNoAccessibilityProblems,
+  KYOTO,
+  mapPhone,
+  press,
+  startMapGame,
+  tapJapan,
+  toGuessing,
+} from './helpers.js';
 
 test.afterEach(closeEverything);
 
-const contexts: BrowserContext[] = [];
-test.afterEach(async () => {
-  await Promise.all(contexts.splice(0).map((context) => context.close().catch(() => undefined)));
-});
-
-const KYOTO = { lat: 34.9671, lng: 135.7727 };
 const TOKYO = { lat: 35.6812, lng: 139.7671 };
 
-/** A blank street style, so these tests don't depend on the map service being up. */
-async function blankStreets(context: BrowserContext): Promise<void> {
-  await context.route('https://tiles.openfreemap.org/**', (route) =>
-    route.fulfill({ json: { version: 8, sources: {}, layers: [] } }),
-  );
-}
-
-/** One map round is the quickest way to give everyone a different score. */
-async function startMapGame(browser: Browser): Promise<{ tv: Page; room: string; context: BrowserContext }> {
-  // The shared helper also keeps the TV's GIFs and word clips off the internet.
-  const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
-  await blankStreets(context);
-  // Lets each test hear what the TV played, without speakers.
-  await context.addInitScript(() => {
-    const heard: string[] = [];
-    (window as unknown as { heard: string[] }).heard = heard;
-    window.addEventListener('tp:sound', (event) => heard.push((event as CustomEvent<string>).detail));
+/**
+ * One map round is the quickest way to give everyone a different score. Each test can hear what
+ * the TV played, without speakers.
+ */
+function startFinaleGame(browser: Browser) {
+  return startMapGame(browser, {}, async (context) => {
+    await context.addInitScript(() => {
+      const heard: string[] = [];
+      (window as unknown as { heard: string[] }).heard = heard;
+      window.addEventListener('tp:sound', (event) => heard.push((event as CustomEvent<string>).detail));
+    });
   });
-  const tv = await context.newPage();
-  failOnPageErrors(tv);
-  await tv.goto('/admin');
-  await tv.getByLabel('Password').fill('e2e-test-password');
-  await tv.getByRole('button', { name: 'Sign in' }).click();
-  await tv.getByRole('heading', { name: 'Your decks' }).waitFor();
-  const upload = await context.request.post('/api/admin/images', {
-    headers: { 'content-type': 'image/jpeg' },
-    data: readFileSync('tests/fixtures/plain.jpg'),
-  });
-  const { id: image } = (await upload.json()) as { id: string };
-  const created = await context.request.post('/api/admin/decks', {
-    data: {
-      title: 'Japan 2026',
-      theme: { accent: null },
-      region: { country: 'Japan' },
-      moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-      games: [{ type: 'geo', settings: {}, items: [{ image, label: 'Fushimi Inari', ...KYOTO }] }],
-    },
-  });
-  const { deck } = (await created.json()) as { deck: { id: string } };
-  const started = await context.request.post('/api/admin/rooms', { data: { deckId: deck.id } });
-  const { id } = (await started.json()) as { id: string };
-  await tv.goto(`/host/${id}`);
-  await tv.getByText('Scan to join').waitFor();
-  return { tv, room: id, context };
-}
-
-async function phone(browser: Browser, room: string, name: string): Promise<Page> {
-  const context = await browser.newContext(PHONE);
-  contexts.push(context);
-  await blankStreets(context);
-  const page = await context.newPage();
-  failOnPageErrors(page);
-  await page.goto(`/j/${room}`);
-  await joinAs(page, name);
-  return page;
 }
 
 interface Bot {
@@ -106,18 +64,6 @@ async function bot(baseURL: string, room: string, name: string): Promise<Bot> {
   };
 }
 
-async function press(tv: Page, key: string): Promise<void> {
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press(key);
-}
-
-async function toGuessing(tv: Page): Promise<void> {
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Where was this?' }).waitFor();
-  await press(tv, 'Space');
-  await tv.getByText('Drop a pin on your phone.').waitFor();
-}
-
 /** Ends the guess, passes the map reveal and the standings, and stops on the first moment of the podium. */
 async function toPodium(tv: Page): Promise<void> {
   await press(tv, 's');
@@ -129,18 +75,6 @@ async function toPodium(tv: Page): Promise<void> {
   await tv.getByRole('heading', { name: 'Standings' }).waitFor();
   await press(tv, 'Space');
   await tv.getByRole('heading', { name: 'Final standings' }).waitFor();
-}
-
-/** Roughly mainland Japan, on the opening view of the phone. */
-async function tapJapan(page: Page): Promise<void> {
-  const canvas = page.locator('.map-stage .maplibregl-canvas');
-  await canvas.waitFor({ timeout: 20_000 });
-  await page.waitForFunction(() => (document.querySelector<HTMLCanvasElement>('.maplibregl-canvas')?.width ?? 0) > 0);
-  await page.waitForTimeout(300);
-  const box = (await canvas.boundingBox())!;
-  const foot = (await page.locator('.map-foot').boundingBox())!;
-  await canvas.tap({ position: { x: box.width * 0.56, y: (foot.y - box.y) * 0.52 } });
-  await expect(page.locator('.pin-mark')).toBeVisible();
 }
 
 /** Records, in the TV's own clock, when each podium place lands. */
@@ -191,8 +125,8 @@ const landed = (tv: Page) => tv.evaluate(() => (window as unknown as { landed: R
 test.describe('the final podium', () => {
   test('lands 3rd, 2nd, then 1st, and each phone waits for its own place', async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
-    const { tv, room } = await startMapGame(browser);
-    const alex = await phone(browser, room, 'Alex');
+    const { tv, room } = await startFinaleGame(browser);
+    const alex = await mapPhone(browser, room, 'Alex');
     const bots = await Promise.all(['Bea', 'Cy', 'Di', 'Ed', 'Flo'].map((name) => bot(baseURL!, room, name)));
     await toGuessing(tv);
     // Bea is spot on, Alex is somewhere in Japan, and nobody else pins, so they tie for 3rd.
@@ -238,14 +172,12 @@ test.describe('the final podium', () => {
     for (const name of tied) expect(['Cy', 'Di', 'Ed', 'Flo']).toContain(name);
     await expect(tv.locator('.place-3')).toContainText('and 1 more');
 
-    const results = await new AxeBuilder({ page: tv }).analyze();
-    expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.html}`)).toEqual([]);
-    const phoneResults = await new AxeBuilder({ page: alex }).analyze();
-    expect(phoneResults.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.html}`)).toEqual([]);
+    await expectNoAccessibilityProblems(tv);
+    await expectNoAccessibilityProblems(alex);
   });
 
   test('Space shows the whole podium at once, and a refreshed TV shows it settled', async ({ browser, baseURL }) => {
-    const { tv, room } = await startMapGame(browser);
+    const { tv, room } = await startFinaleGame(browser);
     const bots = await Promise.all(['Bea', 'Cy', 'Di', 'Ed', 'Flo'].map((name) => bot(baseURL!, room, name)));
     await toGuessing(tv);
     await Promise.all(bots.map((each, index) => each.pin(index * 0.1)));
@@ -268,7 +200,7 @@ test.describe('the final podium', () => {
 
   test('a full room with ties and the longest names fits at 1080p and 720p', async ({ browser, baseURL }) => {
     test.setTimeout(90_000);
-    const { tv, room } = await startMapGame(browser);
+    const { tv, room } = await startFinaleGame(browser);
     const plans: [string, number | null][] = [
       ['Wwwwwwwwwwwwwwww', 0],
       ['Mmmmmmmmmmmmmmmm', 0],
@@ -330,7 +262,7 @@ test.describe('the final podium', () => {
 
 test.describe('sound on the TV', () => {
   test('chimes for each game, hits the podium once after a skip, and M mutes until unmuted', async ({ browser, baseURL }) => {
-    const { tv, room } = await startMapGame(browser);
+    const { tv, room } = await startFinaleGame(browser);
     const bots = await Promise.all(['Bea', 'Cy', 'Di'].map((name) => bot(baseURL!, room, name)));
     const heard = () => tv.evaluate(() => [...(window as unknown as { heard: string[] }).heard]);
 

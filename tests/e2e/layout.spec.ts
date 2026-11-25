@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { io } from 'socket.io-client';
-import { closeEverything, joinAs, openPhone, PHONE, startGame } from './helpers.js';
+import { closeEverything, expectNoAccessibilityProblems, joinAs, openPhone, PHONE, startGame } from './helpers.js';
 
 test.afterEach(closeEverything);
 
@@ -35,11 +34,6 @@ async function expectNoScroll(page: Page): Promise<void> {
   });
   expect(overflow.x).toBeLessThanOrEqual(0);
   expect(overflow.y).toBeLessThanOrEqual(0);
-}
-
-async function expectNoAccessibilityProblems(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
 }
 
 for (const size of SIZES) {
@@ -142,25 +136,6 @@ test.describe('style guide', () => {
     const edit = page.getByRole('button', { name: 'Edit answer' });
     await edit.waitFor();
     expect(await box(edit)).toEqual(resting);
-    await expect(page.getByText('Locked in')).toBeVisible();
-  });
-
-  test('a tap on an answer sends it, and another tap changes it', async ({ page }) => {
-    await page.setViewportSize(size);
-    await page.goto('/styleguide');
-    const options = page.getByRole('radio');
-    await expect(page.getByText('Tap one. You can change it until time runs out.')).toBeVisible();
-
-    const optionBox = await box(options.nth(1));
-    await options.nth(1).click();
-    await expect(options.nth(1)).toHaveAttribute('aria-checked', 'true');
-    await expect(page.getByText('Sending…')).toBeVisible();
-    await expect(page.getByText('Locked in')).toBeVisible();
-    expect(await box(options.nth(1))).toEqual(optionBox);
-
-    await options.nth(0).click();
-    await expect(options.nth(0)).toHaveAttribute('aria-checked', 'true');
-    await expect(options.nth(1)).toHaveAttribute('aria-checked', 'false');
     await expect(page.getByText('Locked in')).toBeVisible();
   });
 

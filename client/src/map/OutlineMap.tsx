@@ -32,6 +32,10 @@ export function outlineProjection([west, south, east, north]: readonly [number, 
   };
 }
 
+function Cross({ x, y }: { x: number; y: number }) {
+  return <path className="outline-target" d={`M${x - PIN_SIZE} ${y}H${x + PIN_SIZE}M${x} ${y - PIN_SIZE}V${y + PIN_SIZE}`} />;
+}
+
 export interface MapMark extends Spot {
   kind: 'pin' | 'target';
 }
@@ -90,18 +94,9 @@ export function OutlineMap({
       {path ? <path className="outline-land" d={path} fillRule="evenodd" /> : null}
       {marks.map((mark, index) => {
         const [x, y] = projection.toPoint(mark.lng, mark.lat);
-        return mark.kind === 'target' ? (
-          <path key={index} className="outline-target" d={`M${x - PIN_SIZE} ${y}H${x + PIN_SIZE}M${x} ${y - PIN_SIZE}V${y + PIN_SIZE}`} />
-        ) : (
-          <circle key={index} className="outline-pin" cx={x} cy={y} r={7} />
-        );
+        return mark.kind === 'target' ? <Cross key={index} x={x} y={y} /> : <circle key={index} className="outline-pin" cx={x} cy={y} r={7} />;
       })}
-      {pinPoint ? (
-        <path
-          className="outline-target"
-          d={`M${pinPoint[0] - PIN_SIZE} ${pinPoint[1]}H${pinPoint[0] + PIN_SIZE}M${pinPoint[0]} ${pinPoint[1] - PIN_SIZE}V${pinPoint[1] + PIN_SIZE}`}
-        />
-      ) : null}
+      {pinPoint ? <Cross x={pinPoint[0]} y={pinPoint[1]} /> : null}
     </svg>
   );
 }

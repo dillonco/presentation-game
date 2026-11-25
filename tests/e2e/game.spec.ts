@@ -1,6 +1,15 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { closeEverything, joinAs, openPhone, PHONE, startGame } from './helpers.js';
+import {
+  chooseAndLock,
+  closeEverything,
+  expectNoAccessibilityProblems,
+  joinAs,
+  openPhone,
+  PHONE,
+  startGame,
+  toRound,
+  write,
+} from './helpers.js';
 
 const REAL = 'Sunlight filtering through the leaves of trees';
 
@@ -19,24 +28,8 @@ const LONG_ANSWERS = [
 test.afterEach(closeEverything);
 
 async function toWriting(tv: Page): Promise<void> {
-  await tv.keyboard.press('Space');
-  await tv.getByRole('heading', { name: 'Define it' }).waitFor();
+  await toRound(tv, 'Define it', 'komorebi');
   await tv.waitForTimeout(550);
-  await tv.keyboard.press('Space');
-  await tv.getByRole('heading', { name: 'komorebi' }).waitFor();
-  await tv.waitForTimeout(550);
-}
-
-async function write(phone: Page, text: string): Promise<void> {
-  await phone.getByLabel('Your fake definition').fill(text);
-  await phone.getByRole('button', { name: 'Send' }).click();
-  await phone.getByText('Locked in').waitFor();
-}
-
-/** A tap is the vote: it sends straight away. */
-async function chooseAndLock(phone: Page, text: string): Promise<void> {
-  await phone.getByRole('radio', { name: text }).click();
-  await phone.getByText('Locked in').waitFor();
 }
 
 async function skipTimer(tv: Page): Promise<void> {
@@ -55,11 +48,6 @@ async function reachVoting(tv: Page): Promise<void> {
     await tv.keyboard.press('s');
   }
   await voting.waitFor();
-}
-
-async function expectNoAccessibilityProblems(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.html}`)).toEqual([]);
 }
 
 test('a TV and three phones play a whole game to the correct standings', async ({ browser }) => {
@@ -128,12 +116,6 @@ test('a TV and three phones play a whole game to the correct standings', async (
   await expect(alex.getByRole('heading', { name: '1st place' })).toBeVisible();
   await expect(sam.getByRole('heading', { name: '2nd place' })).toBeVisible();
 
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press('Space');
-  await tv.getByRole('heading', { name: 'Where was this?' }).waitFor();
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press('Space');
-  await tv.getByRole('heading', { name: 'Caption this' }).waitFor();
   await tv.waitForTimeout(550);
   await tv.keyboard.press('Space');
   await tv.getByRole('heading', { name: 'Final standings' }).waitFor();
