@@ -222,7 +222,7 @@ export class MediaStore {
     cacheDir?: string,
     private readonly maxCacheBytes: number = DEFAULT_CACHE_BYTES,
   ) {
-    this.cacheDir = cacheDir ?? join(tmpdir(), 'trip-party-media');
+    this.cacheDir = cacheDir ?? join(tmpdir(), 'presentation-game-media');
   }
 
   private cachePath(id: string, variant: MediaVariant): string {

@@ -3,21 +3,17 @@ import { fileURLToPath } from 'node:url';
 import { findCountry, insideCountry } from '../shared/countries.js';
 import { countrySlug, insideOutline, type Outline, type Spot } from '../shared/geo.js';
 
-/** Beside the server in a build, which copies them to dist/outlines, and in shared/ otherwise. */
-const FOLDERS = [new URL('../outlines/', import.meta.url), new URL('../shared/outlines/', import.meta.url)];
+/** shared/outlines in development. The build copies them to dist/shared/outlines, the same place relative to the server. */
+const FOLDER = new URL('../shared/outlines/', import.meta.url);
 
 const loaded = new Map<string, Outline | null>();
 
 function readOutline(country: string): Outline | null {
-  const file = `${countrySlug(country)}.json`;
-  for (const folder of FOLDERS) {
-    try {
-      return JSON.parse(readFileSync(fileURLToPath(new URL(file, folder)), 'utf8')) as Outline;
-    } catch {
-      // Not in this folder, so on to the next.
-    }
+  try {
+    return JSON.parse(readFileSync(fileURLToPath(new URL(`${countrySlug(country)}.json`, FOLDER)), 'utf8')) as Outline;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 function outlineOf(country: string): Outline | null {
