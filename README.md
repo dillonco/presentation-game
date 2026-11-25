@@ -1,56 +1,15 @@
 # The Presentation Game
 
-**A live party game for groups.** Put it on the TV, and everyone scans a QR code and plays on their phone: guess the meaning of words, drop pins where photos were taken, caption the best shots, answer questions and vote on each other's answers. Use it to present something, such as a trip, a hobby or a year in review, or just have fun with your own ideas. The night ends on a podium and an optional page of tips to take home.
-
-You build the night in a deck: your words, your photos, your questions. Nobody needs an account or an app, and it runs on one small server.
-
-![A TV and a phone playing Define it](docs/media/hero.gif)
+**A live party game for groups.** Put it on the TV, and everyone scans a QR code and plays on their phone. Use it to present something, such as a trip, a hobby or a year in review, or just have fun with your own ideas. You build the night in a deck: your words, your photos, your questions. Nobody needs an account or an app, and it runs on one small server.
 
 ## The games
 
-<table>
-  <tr>
-    <td width="72%"><img src="docs/media/tv-define-reveal.jpg" alt="The TV revealing the real meaning of komorebi among the guests' fakes"></td>
-    <td><img src="docs/media/phone-define-write.png" alt="A phone writing a fake definition"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><b>Define it.</b> A real word goes up. Everyone writes a fake meaning, then votes for the one they think is real. You score for finding it, and for every friend your fake fooled. Words can come with a clip of someone saying them.</td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/map-reveal.gif" alt="Guests' pins appearing on a map of Japan, with distances"></td>
-    <td><img src="docs/media/phone-geo-pin.png" alt="A phone dropping a pin on a map"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><b>Where was this?</b> A photo goes up and everyone drops a pin on a street map of the country. The closer you are, the more you score.</td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/tv-caption-vote.jpg" alt="The TV showing a photo of deer with four captions to vote on"></td>
-    <td><img src="docs/media/phone-caption-write.png" alt="A phone writing a caption"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><b>Caption this.</b> Everyone captions the same photo, then votes for the best one that isn't theirs.</td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/tv-choice-reveal.jpg" alt="The TV showing how many picked each answer, with the right one circled"></td>
-    <td><img src="docs/media/phone-choice.png" alt="A phone choosing one of four answers"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><b>Pick one.</b> A photo, a question and four answers. The TV shows how everyone split, then circles the right one.</td>
-  </tr>
-</table>
+- **Define it.** A real word goes up. Everyone writes a fake meaning, then votes for the one they think is real. You score for finding it, and for every friend your fake fooled. Words can come with a clip of someone saying them.
+- **Where was this?** A photo goes up and everyone drops a pin on a street map of the country. The closer you are, the more you score.
+- **Caption this.** Everyone captions the same photo, then votes for the best one that isn't theirs.
+- **Pick one.** A photo, a question and four answers. The TV shows how everyone split, then circles the right one.
 
-Each photo can bring up to 5 more from the same moment, pinned up on the TV after its round so you can tell the story behind it.
-
-### The finale
-
-The podium lands one place at a time, and each phone learns its place only when the TV shows it. Then an optional page of tips goes up on the TV and on every phone, with each place a tap away in Maps.
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/media/podium.gif" alt="The final podium landing with confetti"></td>
-    <td width="50%"><img src="docs/media/tips.gif" alt="Tips beside a map with numbered pins"></td>
-  </tr>
-</table>
+Each photo can bring up to 5 more from the same moment, pinned up on the TV after its round. The night ends on a podium that lands one place at a time, then an optional page of tips on the TV and every phone, with each place a tap away in Maps. [`docs/decks.md`](docs/decks.md) covers every game and setting.
 
 ## Run it yourself in two minutes
 
@@ -111,13 +70,11 @@ docker compose up -d
 | `TRUST_PROXY` | How many proxies are in front of the server, usually `1` on a host. Then each visitor gets their own limit on connections. Leave it out when nothing is in front, or anyone could claim any address. Only set it if the proxy passes on real visitor addresses: signed in, `/api/admin/stats` shows `yourAddress`, which should be your own. |
 | `FORCE_HTTPS` | `true` to send every visitor to HTTPS and refuse sign-in over plain HTTP. Set it on a public server unless the host already redirects. |
 
-[`.env.example`](.env.example) lists them all. A game in progress is saved as it goes, so a restart or redeploy only pauses it: the TV and phones reconnect by themselves, on the same screen, with their answers and scores. Still, don't deploy during the party.
+[`.env.example`](.env.example) lists them all. On a public server, use a strong `ADMIN_PASSWORD` and serve it over HTTPS: sign-in cookies are only marked Secure when the request arrived over HTTPS (`X-Forwarded-Proto: https` behind a proxy). A game in progress is saved as it goes, so a restart or redeploy only pauses it: the TV and phones reconnect by themselves, on the same screen, with their answers and scores. Still, don't deploy during the party.
 
 A game holds up to 50 guests. Before a big night, [`docs/rehearsal.md`](docs/rehearsal.md) is a checklist for trying it on the real TV and phones, including a load test.
 
 ## Build your deck
-
-![The deck builder](docs/media/builder.jpg)
 
 Open `/admin` and press **New deck**. Pick the country for the map, add games in any order, and fill them with your words and photos. Changes save as you type, and the builder lists anything that still needs fixing. Keep it off the TV, since it shows the real answers.
 
@@ -149,7 +106,7 @@ Guests can lock their phones, lose signal or refresh, and they come straight bac
 
 ## The look
 
-The TV has no background pictures. Behind everything is a sky drawn from colours, in [`client/src/host/Scene.tsx`](client/src/host/Scene.tsx) and [`client/src/theme/scene.css`](client/src/theme/scene.css), with a different time of day for each part of the night: dusk in the lobby, daytime on each game's title card, night during rounds, sunset for the standings and a lantern-lit night for the podium. Clouds part between games. Anyone set to reduce motion gets a still version. A deck's accent colour tints the rest. The screenshots here were taken with photo backgrounds, which the game no longer has.
+The TV has no background pictures. Behind everything is a sky drawn from colours, in [`client/src/host/Scene.tsx`](client/src/host/Scene.tsx) and [`client/src/theme/scene.css`](client/src/theme/scene.css), with a different time of day for each part of the night: dusk in the lobby, daytime on each game's title card, night during rounds, sunset for the standings and a lantern-lit night for the podium. Clouds part between games. Anyone set to reduce motion gets a still version. A deck's accent colour tints the rest.
 
 There is no background music: the TV makes its own beeps and chimes, and plays a word's clip when it has one. Each title card and standings screen pins up a GIF from Giphy, set in [`client/src/theme/gifs.ts`](client/src/theme/gifs.ts). The TV needs internet for the GIFs and word clips. Anything that can't load is left out.
 
@@ -162,11 +119,19 @@ npm run test:integration  # a real server, with simulated TVs and phones
 npm run test:e2e          # a TV and phones in real browsers
 ```
 
-The browser tests need `npx playwright install chromium` once. They're slow and timing-sensitive, so CI runs everything except them. `/styleguide` shows the phone components at real sizes.
+The browser tests need `npx playwright install chromium` once. They're slow and timing-sensitive, so CI runs everything except them: run them locally for anything that changes what's on screen. `/styleguide` shows the phone components at real sizes.
 
-`npm run build && npm run capture` plays a whole game in headless browsers and remakes every screenshot and GIF in this README. It needs [ffmpeg](https://ffmpeg.org).
+One server holds every game in memory and talks to the TV and phones over Socket.IO. The server decides everything, including timers, scores and what each screen shows, so a phone can't see an answer before the reveal or vote for its own. The server is [Fastify](https://fastify.dev), and the client is React, built with Vite.
 
-The server is [Fastify](https://fastify.dev) and [Socket.IO](https://socket.io), and the client is React, built with Vite. Code shared by both is in `shared/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for how it fits together. To report a security problem, see [SECURITY.md](SECURITY.md).
+| Folder | |
+| --- | --- |
+| `shared/` | Code both sides use: the deck format and its checks (`deck.ts`), the messages (`messages.ts`, `protocol.ts`), map maths and country outlines. |
+| `server/session/` | `room.ts` is one game's state machine: lobby, rounds, reveals, standings and the podium. `manager.ts` keeps rooms and saves them, so a restart picks up where it left off. `sockets.ts` connects TVs and phones to their room. |
+| `server/games/` | Scoring and checks for each game type. |
+| `server/storage/` | Disk or S3 storage for decks, photos and saved games. |
+| `client/src/` | `host/` is the TV, `guest/` the phones, `admin/` the deck builder, `map/` the MapLibre maps. |
+
+Each screen's contents come from the server as a `HostScreen` or `GuestScreen` (see `shared/protocol.ts`). A new screen or game usually means a new kind there, the state that produces it in `room.ts`, and a view for the TV and for phones.
 
 ## Credits
 
