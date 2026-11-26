@@ -1,5 +1,3 @@
-import { TokenBucket } from './session/rate-limit.js';
-
 /**
  * How many proxies in front of this server to trust, from TRUST_PROXY. Only a count: trusting
  * every hop would let a client name any address it likes in X-Forwarded-For.
@@ -43,28 +41,4 @@ export function visitorKey(address: string): string {
     .slice(0, 4)
     .map((group) => group.replace(/^0+(?=.)/, ''))
     .join(':')}::/64`;
-}
-
-/** A token bucket per visitor, forgetting the oldest once it knows too many. */
-export class AddressBuckets {
-  private readonly buckets = new Map<string, TokenBucket>();
-
-  constructor(
-    private readonly burst: number,
-    private readonly perSecond: number,
-    private readonly limit = 10_000,
-  ) {}
-
-  take(address: string, now: number): boolean {
-    address = visitorKey(address);
-    let bucket = this.buckets.get(address);
-    if (bucket) {
-      this.buckets.delete(address);
-    } else {
-      bucket = new TokenBucket(this.burst, this.perSecond, now);
-      if (this.buckets.size >= this.limit) this.buckets.delete(this.buckets.keys().next().value!);
-    }
-    this.buckets.set(address, bucket);
-    return bucket.take(now);
-  }
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { HostScreen, StandingRow } from '../../../shared/protocol.js';
 import { PODIUM, podiumPlan, type Medal } from '../../../shared/reveal.js';
 import { ordinal } from '../theme/games.js';
+import { useElapsed } from '../ui/reveal.js';
 import { useRollUp } from './RoundViews.js';
 
 type FinalScreen = Extract<HostScreen, { kind: 'final' }>;
@@ -11,21 +12,6 @@ type Arrival = 'waiting' | 'landing' | 'appear' | 'settled';
 
 const MEDALS: readonly Medal[] = [1, 2, 3];
 const CONFETTI_MS = 3400;
-
-/** Milliseconds since the podium started, timed from the server so a refreshed TV picks up where it was. */
-function useElapsed(startedAt: number, endsAt: number): number {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (Date.now() >= endsAt) {
-      setTick((tick) => tick + 1);
-      return;
-    }
-    const timer = window.setInterval(() => setTick((tick) => tick + 1), 100);
-    return () => window.clearInterval(timer);
-  }, [endsAt]);
-  const now = Date.now();
-  return now >= endsAt ? Number.POSITIVE_INFINITY : now - startedAt;
-}
 
 function reducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;

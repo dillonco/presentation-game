@@ -1,35 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import type { Country } from '../../../shared/countries.js';
 import type { HostScreen } from '../../../shared/protocol.js';
 import { PIN_REVEAL, pinNameTimes } from '../../../shared/reveal.js';
+import { lazyMap } from '../map/lazy.js';
 import { OutlineMap, type MapMark } from '../map/OutlineMap.js';
 import { useOutline } from '../map/useOutline.js';
 import { formatKm, GAME_NAMES, roundPosition } from '../theme/games.js';
 import { TvPhoto } from '../ui/Photo.js';
+import { useElapsed } from '../ui/reveal.js';
 
-type RevealMapProps = Parameters<typeof import('../map/RevealMap.js').default>[0];
-
-/** If the map engine can't arrive, it says so and the view falls back to the outline. */
-const RevealMap = lazy(() =>
-  import('../map/RevealMap.js').catch(() => ({
-    default: ({ onFail }: RevealMapProps) => {
-      useEffect(onFail, [onFail]);
-      return <></>;
-    },
-  })),
-);
-
-/** Time since the reveal began. Passes the end straight away once Space has skipped ahead. */
-function useElapsed(startedAt: number, endsAt: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (Date.now() >= endsAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, [endsAt]);
-  const current = Math.max(now, Date.now());
-  return current >= endsAt ? Number.POSITIVE_INFINITY : current - startedAt;
-}
+const RevealMap = lazyMap(() => import('../map/RevealMap.js'));
 
 export function PinRevealView({
   screen,

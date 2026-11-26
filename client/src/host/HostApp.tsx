@@ -8,6 +8,7 @@ import type {
   HostPlayer,
   HostView,
 } from '../../../shared/protocol.js';
+import { usePreloadedMap } from '../map/lazy.js';
 import { keepClockSynced } from '../net/clock.js';
 import { openSocket, reconnectWithNetwork } from '../net/socket.js';
 import { GAME_NAMES, GAME_NUMERALS, GAME_RULES } from '../theme/games.js';
@@ -15,6 +16,7 @@ import { gifFor, STANDINGS_GIFS, TITLE_GIFS } from '../theme/gifs.js';
 import '../theme/components.css';
 import '../theme/tv.css';
 import { useAccent } from '../ui/accent.js';
+import { useHeldUntil } from '../ui/reveal.js';
 import { FinalView } from './FinalView.js';
 import { GalleryView } from './GalleryView.js';
 import { GifCard } from './GifCard.js';
@@ -25,6 +27,7 @@ import { PinRevealView } from './PinRevealView.js';
 import { TipsView } from './TipsView.js';
 import {
   GuessView,
+  namesTier,
   PickRevealView,
   PickView,
   RevealView,
@@ -121,12 +124,6 @@ function useHostSession(room: string) {
   return { view, connection, offset, send };
 }
 
-function namesTier(count: number): string {
-  if (count <= 18) return 'tier-1';
-  if (count <= 32) return 'tier-2';
-  return 'tier-3';
-}
-
 function Lobby({ view, joinUrl }: { view: HostView; joinUrl: string }) {
   const full = view.players.length >= view.capacity;
   let instruction = 'Scan to join';
@@ -168,14 +165,6 @@ function Lobby({ view, joinUrl }: { view: HostView; joinUrl: string }) {
           <div className="lobby-caption">
             <p className="lobby-instruction">{instruction}</p>
             <p className="lobby-sub">{sub}</p>
-            {view.joinCode ? (
-              <p className="lobby-sub">
-                Or go to {window.location.host} and type
-                <span className="lobby-code" aria-label={view.joinCode.split('').join(' ')}>
-                  {view.joinCode}
-                </span>
-              </p>
-            ) : null}
           </div>
         </section>
         {view.players.length === 0 ? (
@@ -258,7 +247,7 @@ function PlayerPanel({
 }
 
 /**
- * The join code again, for after the lobby: a guest who closed the page scans it to get back in.
+ * The join QR code again, for after the lobby: a guest who closed the page scans it to get back in.
  * The same phone still holds its place and goes straight back. Another phone enters the same name,
  * and the TV asks the presenter.
  */
@@ -297,15 +286,7 @@ function PodiumSkip({
   onSkip: () => void;
   next: boolean;
 }) {
-  const endsAt = screen.shown ? 0 : screen.endsAt - offset;
-  const [landing, setLanding] = useState(() => Date.now() < endsAt);
-  useEffect(() => {
-    const wait = endsAt - Date.now();
-    setLanding(wait > 0);
-    if (wait <= 0) return;
-    const timer = window.setTimeout(() => setLanding(false), wait);
-    return () => window.clearTimeout(timer);
-  }, [endsAt]);
+  const landing = !useHeldUntil(screen.shown ? 0 : screen.endsAt - offset);
   if (!landing) {
     return next ? (
       <button type="button" className="tv-key" onClick={onSkip}>
@@ -342,67 +323,56 @@ function useFullScreen(): { supported: boolean; on: boolean; toggle: () => void 
 export default function HostApp({ room }: { room: string }) {
   const { view, connection, offset, send } = useHostSession(room);
   const fullScreen = useFullScreen();
-  const toggleFullScreen = fullScreen.toggle;
   const [panelOpen, setPanelOpen] = useState(false);
   const [rejoinOpen, setRejoinOpen] = useState(false);
   const [barShown, setBarShown] = useState(false);
   const [muted, setMutedState] = useState(isMuted);
-  const toggleMute = useCallback(() => {
-    setMutedState((value) => {
-      storeMuted(!value);
-      return !value;
-    });
-  }, []);
   useSoundCues(view, offset);
   // Counts presses of H. The word on screen plays its clip again on each one.
   const [replay, setReplay] = useState(0);
 
   const joinUrl = `${window.location.origin}/j/${room}`;
 
-  // Reads the newest view from inside the single key listener.
-  const latest = useRef(view);
-  latest.current = view;
-
   const lastNextAt = useRef(Number.NEGATIVE_INFINITY);
-
-  const next = useCallback(() => {
-    const current = latest.current;
-    if (!current) return;
-    // Naming the screen stops a double press that reaches the server before the TV updates.
-    // On a fast connection the TV can update between presses, so a short pause covers that too.
-    const now = performance.now();
-    if (now - lastNextAt.current < DOUBLE_PRESS_MS) return;
-    lastNextAt.current = now;
-    void send({ type: 'next', screenId: current.screenId });
-  }, [send]);
-
   const lastTimeAt = useRef(Number.NEGATIVE_INFINITY);
-
   const screenChangedAt = useRef(Number.NEGATIVE_INFINITY);
   const screenId = view?.screenId;
   useEffect(() => {
     screenChangedAt.current = performance.now();
   }, [screenId]);
 
-  const skipTimer = useCallback(() => {
-    const current = latest.current;
-    if (!current) return;
+  const toggleMute = () => {
+    storeMuted(!muted);
+    setMutedState(!muted);
+  };
+
+  const next = () => {
+    if (!view) return;
+    // Naming the screen stops a double press that reaches the server before the TV updates.
+    // On a fast connection the TV can update between presses, so a short pause covers that too.
+    const now = performance.now();
+    if (now - lastNextAt.current < DOUBLE_PRESS_MS) return;
+    lastNextAt.current = now;
+    void send({ type: 'next', screenId: view.screenId });
+  };
+
+  const skipTimer = () => {
+    if (!view) return;
     // A doubled S ends the writing, and mustn't also throw away the answers that just came up.
-    if (current.screen.kind === 'show' && performance.now() - screenChangedAt.current < DOUBLE_PRESS_MS) return;
-    void send({ type: 'skipTimer', screenId: current.screenId });
-  }, [send]);
+    if (view.screen.kind === 'show' && performance.now() - screenChangedAt.current < DOUBLE_PRESS_MS) return;
+    void send({ type: 'skipTimer', screenId: view.screenId });
+  };
 
   /** A held or doubled key shouldn't add 30 seconds. */
-  const addTime = useCallback(() => {
-    const current = latest.current;
+  const addTime = () => {
     const now = performance.now();
-    if (!current || now - lastTimeAt.current < DOUBLE_PRESS_MS) return;
+    if (!view || now - lastTimeAt.current < DOUBLE_PRESS_MS) return;
     lastTimeAt.current = now;
-    void send({ type: 'addTime', screenId: current.screenId });
-  }, [send]);
+    void send({ type: 'addTime', screenId: view.screenId });
+  };
 
-  const togglePause = useCallback(() => {
-    const screen = latest.current?.screen;
+  const togglePause = () => {
+    const screen = view?.screen;
     if (
       screen?.kind === 'write' ||
       screen?.kind === 'show' ||
@@ -412,69 +382,63 @@ export default function HostApp({ room }: { room: string }) {
     ) {
       void send({ type: 'setPaused', paused: screen.timer.pausedRemainingMs === null });
     }
-  }, [send]);
+  };
 
-  const replayClip = useCallback(() => {
-    const screen = latest.current?.screen;
-    if (screen?.kind === 'write' && screen.round.clip) setReplay((count) => count + 1);
-  }, []);
+  const replayClip = () => {
+    if (view?.screen.kind === 'write' && view.screen.round.clip) setReplay((count) => count + 1);
+  };
 
-  const hideEntry = useCallback((entryId: string) => void send({ type: 'hideEntry', entryId }), [send]);
+  const hideEntry = (entryId: string) => void send({ type: 'hideEntry', entryId });
 
-  const toggleLock = useCallback(() => {
-    const current = latest.current;
-    if (current) void send({ type: 'setJoinLocked', locked: !current.joinLocked });
-  }, [send]);
+  const toggleLock = () => {
+    if (view) void send({ type: 'setJoinLocked', locked: !view.joinLocked });
+  };
 
-  const answerFirstRejoin = useCallback(
-    (approve: boolean) => {
-      const request = latest.current?.rejoinRequests[0];
-      if (request) void send({ type: 'answerRejoin', requestId: request.id, approve });
-    },
-    [send],
-  );
+  const answerRejoin = (requestId: string, approve: boolean) => void send({ type: 'answerRejoin', requestId, approve });
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    unlockSound();
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === ' ') {
+      event.preventDefault();
+      // Stops Space also clicking whichever on-screen button has focus.
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      next();
+    } else if (key === 's') {
+      skipTimer();
+    } else if (key === '+' || key === '=') {
+      addTime();
+    } else if (key === 'p') {
+      togglePause();
+    } else if (key === 'l') {
+      toggleLock();
+    } else if (key === 'r') {
+      setPanelOpen((open) => !open);
+    } else if (key === 'j') {
+      // The lobby already shows the code.
+      if (view?.screen.kind !== 'lobby') setRejoinOpen((open) => !open);
+    } else if (key === 'escape') {
+      setPanelOpen(false);
+      setRejoinOpen(false);
+    } else if (key === 'm') {
+      toggleMute();
+    } else if ((key === 'y' || key === 'n') && view?.rejoinRequests[0]) {
+      answerRejoin(view.rejoinRequests[0].id, key === 'y');
+    } else if (key === 'h') {
+      replayClip();
+    } else if (key === 'f') {
+      fullScreen.toggle();
+    }
+  };
+  // One listener for the page's life, which always runs this render's handler.
+  const keyHandler = useRef(onKeyDown);
+  keyHandler.current = onKeyDown;
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      unlockSound();
-      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-      const key = event.key.toLowerCase();
-      if (key === ' ') {
-        event.preventDefault();
-        // Stops Space also clicking whichever on-screen button has focus.
-        (document.activeElement as HTMLElement | null)?.blur?.();
-        next();
-      } else if (key === 's') {
-        skipTimer();
-      } else if (key === '+' || key === '=') {
-        addTime();
-      } else if (key === 'p') {
-        togglePause();
-      } else if (key === 'l') {
-        toggleLock();
-      } else if (key === 'r') {
-        setPanelOpen((open) => !open);
-      } else if (key === 'j') {
-        // The lobby already shows the code.
-        if (latest.current?.screen.kind !== 'lobby') setRejoinOpen((open) => !open);
-      } else if (key === 'escape') {
-        setPanelOpen(false);
-        setRejoinOpen(false);
-      } else if (key === 'm') {
-        toggleMute();
-      } else if (key === 'y') {
-        answerFirstRejoin(true);
-      } else if (key === 'n') {
-        answerFirstRejoin(false);
-      } else if (key === 'h') {
-        replayClip();
-      } else if (key === 'f') {
-        toggleFullScreen();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [next, skipTimer, addTime, togglePause, toggleLock, answerFirstRejoin, toggleMute, replayClip, toggleFullScreen]);
+    const listener = (event: KeyboardEvent) => keyHandler.current(event);
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
 
   useEffect(() => {
     window.addEventListener('pointerdown', unlockSound);
@@ -496,12 +460,7 @@ export default function HostApp({ room }: { room: string }) {
   }, []);
 
   // Fetched during the game before it, so the reveal never waits on the map.
-  const mapCountry = view?.mapArea?.name;
-  useEffect(() => {
-    if (!mapCountry) return;
-    void import('../map/RevealMap.js').catch(() => undefined);
-    void import('../map/outline.js').then((module) => module.loadOutline(mapCountry)).catch(() => undefined);
-  }, [mapCountry]);
+  usePreloadedMap(view?.mapArea?.name, () => import('../map/RevealMap.js'));
 
   if (connection === 'missing') {
     return (
@@ -573,14 +532,14 @@ export default function HostApp({ room }: { room: string }) {
               <button
                 type="button"
                 className="tv-key"
-                onClick={() => void send({ type: 'answerRejoin', requestId: request.id, approve: true })}
+                onClick={() => answerRejoin(request.id, true)}
               >
                 Allow {index === 0 ? <kbd>Y</kbd> : null}
               </button>
               <button
                 type="button"
                 className="tv-key"
-                onClick={() => void send({ type: 'answerRejoin', requestId: request.id, approve: false })}
+                onClick={() => answerRejoin(request.id, false)}
               >
                 Decline {index === 0 ? <kbd>N</kbd> : null}
               </button>
@@ -662,7 +621,7 @@ export default function HostApp({ room }: { room: string }) {
           {muted ? 'Unmute' : 'Mute'} <kbd>M</kbd>
         </button>
         {fullScreen.supported ? (
-          <button type="button" className="tv-key" aria-pressed={fullScreen.on} onClick={toggleFullScreen}>
+          <button type="button" className="tv-key" aria-pressed={fullScreen.on} onClick={fullScreen.toggle}>
             {fullScreen.on ? 'Exit full screen' : 'Full screen'} <kbd>F</kbd>
           </button>
         ) : null}

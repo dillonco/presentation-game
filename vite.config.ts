@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from 'vite';
 /** Writes the service worker with an ID for this build, so a new release replaces the old files. */
 function serviceWorker(): Plugin {
   return {
-    name: 'trip-party-service-worker',
+    name: 'service-worker',
     apply: 'build',
     generateBundle(_options, bundle) {
       const build = createHash('sha256').update(Object.keys(bundle).sort().join('\n')).digest('hex').slice(0, 12);

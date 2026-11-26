@@ -25,15 +25,15 @@ describe('a pin round', () => {
     const round = pinRound();
     round.place('a', TOKYO.lat, TOKYO.lng);
     round.place('a', KYOTO.lat, KYOTO.lng);
-    expect(round.pinOf('a')).toEqual({ lat: 35.0116, lng: 135.7681 });
-    expect(round.pinnedIds()).toEqual(['a']);
+    expect(round.guessOf('a')).toEqual({ lat: 35.0116, lng: 135.7681 });
+    expect(round.guessedIds()).toEqual(['a']);
   });
 
   it('refuses a pin outside the country, and leaves the old one in place', () => {
     const round = pinRound();
     round.place('a', TOKYO.lat, TOKYO.lng);
     expect(round.place('a', ROME.lat, ROME.lng)).toEqual({ ok: false, code: 'outside_country' });
-    expect(round.pinOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
+    expect(round.guessOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
   });
 
   it('ignores repeats and older messages', () => {
@@ -41,9 +41,9 @@ describe('a pin round', () => {
     const place = (seq: number, spot: typeof KYOTO) => round.act('a', seq, () => round.place('a', spot.lat, spot.lng));
     expect(place(2, TOKYO)).toEqual({ ok: true });
     expect(place(2, SAPPORO)).toEqual({ ok: true });
-    expect(round.pinOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
+    expect(round.guessOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
     expect(place(1, SAPPORO)).toEqual({ ok: false, code: 'stale_action' });
-    expect(round.pinOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
+    expect(round.guessOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
     expect(round.lastSeq('a')).toBe(2);
   });
 
@@ -85,7 +85,7 @@ describe('a pin round', () => {
     const state = PinRound.parseState(JSON.parse(JSON.stringify(round.toState())))!;
     const restored = new PinRound(round.config, state);
     expect(restored.resolved).toBe(true);
-    expect(restored.pinOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
+    expect(restored.guessOf('a')).toEqual({ lat: TOKYO.lat, lng: TOKYO.lng });
     expect(restored.lastSeq('a')).toBe(3);
     expect(restored.hasLeftPage('a')).toBe(true);
   });

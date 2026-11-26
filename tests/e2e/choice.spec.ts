@@ -1,45 +1,15 @@
-import { readFileSync } from 'node:fs';
-import { expect, test, type Browser, type Page } from '@playwright/test';
-import { closeEverything, failOnPageErrors, joinAs, newContext, openPhone } from './helpers.js';
+import { expect, test, type Browser } from '@playwright/test';
+import { closeEverything, joinAs, openPhone, press, startGame } from './helpers.js';
 
 test.afterEach(closeEverything);
 
 const RIGHT = 'Fushimi Inari';
 const OPTIONS = [RIGHT, 'Kiyomizu-dera', 'Kinkaku-ji', 'Nara Park'];
 
-async function startPickGame(browser: Browser): Promise<{ tv: Page; room: string }> {
-  const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
-  const tv = await context.newPage();
-  failOnPageErrors(tv);
-  await tv.goto('/admin');
-  await tv.getByLabel('Password').fill('e2e-test-password');
-  await tv.getByRole('button', { name: 'Sign in' }).click();
-  await tv.getByRole('heading', { name: 'Your decks' }).waitFor();
-  const upload = await context.request.post('/api/admin/images', {
-    headers: { 'content-type': 'image/jpeg' },
-    data: readFileSync('tests/fixtures/plain.jpg'),
-  });
-  const { id: image } = (await upload.json()) as { id: string };
-  const created = await context.request.post('/api/admin/decks', {
-    data: {
-      title: 'Which shrine',
-      theme: { accent: null },
-      region: { country: 'Japan' },
-      moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-      games: [{ type: 'choice', settings: {}, items: [{ image, question: 'Where is this?', options: OPTIONS, answer: 0 }] }],
-    },
-  });
-  const { deck } = (await created.json()) as { deck: { id: string } };
-  const started = await context.request.post('/api/admin/rooms', { data: { deckId: deck.id } });
-  const { id } = (await started.json()) as { id: string };
-  await tv.goto(`/host/${id}`);
-  await tv.getByText('Scan to join').waitFor();
-  return { tv, room: id };
-}
-
-async function press(tv: Page, key: string): Promise<void> {
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press(key);
+function startPickGame(browser: Browser) {
+  return startGame(browser, (image) => [
+    { type: 'choice', settings: {}, items: [{ image, question: 'Where is this?', options: OPTIONS, answer: 0 }] },
+  ]);
 }
 
 test('a tap on an answer sends it, and another tap changes it, with no button to press', async ({ browser }) => {

@@ -43,9 +43,11 @@ export const guestPinSchema = z.strictObject({
 export const guestPickSchema = z.strictObject({ screenId, seq, option: z.number().int().min(0).max(3) });
 
 export const hostCommandSchema = z.discriminatedUnion('type', [
+  // Names the screen it was pressed on, so a double press can't skip one.
   z.strictObject({ type: z.literal('next'), screenId }),
   z.strictObject({ type: z.literal('skipTimer'), screenId }),
   z.strictObject({ type: z.literal('addTime'), screenId }),
+  // States the wanted value rather than toggling, so a double press changes nothing extra.
   z.strictObject({ type: z.literal('setPaused'), paused: z.boolean() }),
   z.strictObject({ type: z.literal('setJoinLocked'), locked: z.boolean() }),
   z.strictObject({ type: z.literal('remove'), playerId: shortId }),

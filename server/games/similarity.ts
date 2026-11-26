@@ -42,7 +42,7 @@ function tokens(text: string): string[] {
 }
 
 /** The meaningful words of an answer. An answer of only small words keeps them. */
-export function meaningfulWords(text: string): string[] {
+function meaningfulWords(text: string): string[] {
   const all = tokens(text);
   const content = all.filter((word) => !SMALL_WORDS.has(word));
   return (content.length > 0 ? content : all).map(stem);

@@ -10,8 +10,6 @@ function isMissing(error: unknown): boolean {
 }
 
 export class DiskStorage implements Storage {
-  readonly backend = 'disk' as const;
-
   constructor(private readonly root: string) {}
 
   async put(key: string, body: Buffer | string, contentType: string): Promise<void> {

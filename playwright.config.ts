@@ -26,7 +26,7 @@ export default defineConfig({
     env: {
       PORT: String(PORT),
       // A throwaway folder, so test games never mix with local ones.
-      DATA_DIR: mkdtempSync(join(tmpdir(), 'trip-party-e2e-')),
+      DATA_DIR: mkdtempSync(join(tmpdir(), 'presentation-game-e2e-')),
       ADMIN_PASSWORD: 'e2e-test-password',
       SESSION_SECRET: 'e2e-test-session-secret-long-enough',
     },

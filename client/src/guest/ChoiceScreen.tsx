@@ -6,15 +6,7 @@ import { PhotoThumb } from '../ui/Photo.js';
 import { StatusArea } from '../ui/StatusArea.js';
 import { TimerStrip } from '../ui/TimerStrip.js';
 import { choiceStatus, useInstantChoice } from './useInstantChoice.js';
-import {
-  letterFor,
-  LookUp,
-  ordinal,
-  stripLabel,
-  useAtDeadline,
-  useHeldUntil,
-  type RoundSession,
-} from './RoundScreens.js';
+import { letterFor, RoundResult, stripLabel, useAtDeadline, type RoundSession } from './RoundScreens.js';
 
 type PickData = Extract<GuestScreen, { kind: 'pick' }>;
 type PickRevealData = Extract<GuestScreen, { kind: 'pickReveal' }>;
@@ -76,22 +68,14 @@ function resultLine(result: ChoiceRoundResult): string {
 }
 
 export function PickRevealScreen({ screen, offset }: { screen: PickRevealData; offset: number }) {
-  const revealed = useHeldUntil(screen.endsAt - offset);
-  const { round, result } = screen;
-  if (!revealed) return <LookUp round={round} body="The answer is on its way." />;
   return (
-    <main className="sheet">
-      <div className="waiting">
-        <div className="waiting-main">
-          <p className="kicker">The answer: {screen.answer}</p>
-          <h1 className="notice-title">{resultLine(result)}</h1>
-          <p className="result-points">+{result.points}</p>
-        </div>
-        <div className="waiting-foot">
-          <span>Total {result.total}</span>
-          <span>{ordinal(result.rank)} place</span>
-        </div>
-      </div>
-    </main>
+    <RoundResult
+      endsAt={screen.endsAt - offset}
+      round={screen.round}
+      waiting="The answer is on its way."
+      kicker={`The answer: ${screen.answer}`}
+      line={resultLine(screen.result)}
+      result={screen.result}
+    />
   );
 }

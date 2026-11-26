@@ -1,4 +1,4 @@
-// Made by scripts/build-countries.mjs from Natural Earth (public domain). Don't edit by hand.
+// Generated from Natural Earth (public domain) by scripts/build-countries.mjs, now in git history. Don't edit by hand.
 
 export interface Country {
   name: string;

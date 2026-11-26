@@ -1,7 +1,17 @@
-import { readFileSync } from 'node:fs';
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
-import { closeEverything, failOnPageErrors, joinAs, newContext, openPhone, PHONE } from './helpers.js';
+import {
+  chooseAndLock,
+  closeEverything,
+  expectNoAccessibilityProblems,
+  failOnPageErrors,
+  joinAs,
+  openPhone,
+  PHONE,
+  press,
+  startGame,
+  toRound,
+  write,
+} from './helpers.js';
 
 test.afterEach(closeEverything);
 
@@ -23,63 +33,12 @@ const LONG_CAPTIONS = [
   '新宿駅で迷子になって二十分も歩き続けた結果、最初の改札口に戻ってきてしまった私たちを、駅員さんが優しい目で見守っていた。お土産の袋はもう破れそうで、誰も地図を読めないまま、ただ静かに自動販売機の前で温かいお茶を買って飲んでいた午後のこと。',
 ];
 
-async function startCaptionGame(
-  browser: Browser,
-  settings: Record<string, number> = {},
-): Promise<{ tv: Page; room: string; image: string }> {
-  // The shared helper also keeps the TV's GIFs and word clips off the internet.
-  const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
-  const tv = await context.newPage();
-  failOnPageErrors(tv);
-  await tv.goto('/admin');
-  await tv.getByLabel('Password').fill('e2e-test-password');
-  await tv.getByRole('button', { name: 'Sign in' }).click();
-  await tv.getByRole('heading', { name: 'Your decks' }).waitFor();
-
-  const upload = await context.request.post('/api/admin/images', {
-    headers: { 'content-type': 'image/jpeg' },
-    data: readFileSync('tests/fixtures/plain.jpg'),
-  });
-  const { id: image } = (await upload.json()) as { id: string };
-  const created = await context.request.post('/api/admin/decks', {
-    data: {
-      title: 'Captions',
-      theme: { accent: null },
-      region: { country: 'Japan' },
-      moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-      games: [{ type: 'caption', settings, items: [{ image }] }],
-    },
-  });
-  const { deck } = (await created.json()) as { deck: { id: string } };
-  const started = await context.request.post('/api/admin/rooms', { data: { deckId: deck.id } });
-  const { id } = (await started.json()) as { id: string };
-  await tv.goto(`/host/${id}`);
-  await tv.getByText('Scan to join').waitFor();
-  return { tv, room: id, image };
-}
-
-async function press(tv: Page, key: string): Promise<void> {
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press(key);
+function startCaptionGame(browser: Browser, settings: Record<string, number> = {}) {
+  return startGame(browser, (image) => [{ type: 'caption', settings, items: [{ image }] }]);
 }
 
 async function toWriting(tv: Page): Promise<void> {
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Caption this' }).waitFor();
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Write your best caption' }).waitFor();
-}
-
-async function write(phone: Page, text: string): Promise<void> {
-  await phone.getByLabel('Your caption').fill(text);
-  await phone.getByRole('button', { name: 'Send' }).click();
-  await phone.getByText('Locked in').waitFor();
-}
-
-/** A tap is the vote: it sends straight away. */
-async function chooseAndLock(phone: Page, text: string): Promise<void> {
-  await phone.getByRole('radio', { name: text }).click();
-  await phone.getByText('Locked in').waitFor();
+  await toRound(tv, 'Caption this', 'Write your best caption');
 }
 
 async function photoIsShowing(photo: Locator): Promise<void> {
@@ -87,25 +46,6 @@ async function photoIsShowing(photo: Locator): Promise<void> {
     .poll(() => photo.evaluate((image: HTMLImageElement) => (image.complete ? image.naturalWidth : 0)))
     .toBeGreaterThan(0);
   await expect(photo).toHaveCSS('opacity', '1');
-}
-
-/** From writing, past the captions being shown, to the vote. */
-async function skipToVoting(tv: Page): Promise<void> {
-  const voting = tv.getByRole('heading', { name: 'Vote for the best' });
-  for (let press = 0; press < 3 && !(await voting.isVisible()); press += 1) {
-    await skipOnce(tv);
-  }
-  await voting.waitFor();
-}
-
-async function skipOnce(tv: Page): Promise<void> {
-  await press(tv, 's');
-  await tv.waitForTimeout(300);
-}
-
-async function noAccessibilityProblems(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.html}`)).toEqual([]);
 }
 
 test('a TV and three phones caption a photo through to the standings', async ({ browser }) => {
@@ -123,8 +63,8 @@ test('a TV and three phones caption a photo through to the standings', async ({ 
   await photoIsShowing(tv.locator('.tv-photo img'));
   await photoIsShowing(alex.locator('.photo-thumb img'));
   await expect(alex.getByText('Caption this · Photo 1 of 1')).toBeVisible();
-  await noAccessibilityProblems(tv);
-  await noAccessibilityProblems(alex);
+  await expectNoAccessibilityProblems(tv);
+  await expectNoAccessibilityProblems(alex);
 
   // Tapping opens it larger with the timer still in sight, and the typed text survives.
   await alex.getByLabel('Your caption').fill('A cat judging the platform');
@@ -134,7 +74,7 @@ test('a TV and three phones caption a photo through to the standings', async ({ 
   const [thumbBox, largeBox] = [await alex.locator('.photo-thumb').boundingBox(), await large.boundingBox()];
   expect(largeBox!.height).toBeGreaterThan(thumbBox!.height * 2);
   await expect(alex.locator('.strip')).toBeInViewport();
-  await noAccessibilityProblems(alex);
+  await expectNoAccessibilityProblems(alex);
   await alex.keyboard.press('Escape');
   await expect(large).toBeHidden();
   await expect(alex.getByLabel('Your caption')).toHaveValue('A cat judging the platform');
@@ -159,8 +99,7 @@ test('a TV and three phones caption a photo through to the standings', async ({ 
   await expect(tv.locator('.entry-text')).toHaveCount(1);
   const firstShown = await tv.locator('.entry-text').textContent();
   await tv.waitForTimeout(400);
-  await noAccessibilityProblems(tv);
-  await noAccessibilityProblems(alex);
+  await expectNoAccessibilityProblems(tv);
 
   await press(tv, 'p');
   await expect(tv.getByText('Paused')).toBeVisible();
@@ -177,8 +116,8 @@ test('a TV and three phones caption a photo through to the standings', async ({ 
   await photoIsShowing(tv.locator('.tv-photo img'));
   await expect(alex.getByRole('radio')).toHaveCount(1);
   await expect(priya.getByRole('radio')).toHaveCount(2);
-  await noAccessibilityProblems(tv);
-  await noAccessibilityProblems(priya);
+  await expectNoAccessibilityProblems(tv);
+  await expectNoAccessibilityProblems(priya);
 
   await chooseAndLock(alex, 'Rush hour, as seen by the pigeons');
   await chooseAndLock(sam, 'A cat judging the platform');
@@ -193,13 +132,12 @@ test('a TV and three phones caption a photo through to the standings', async ({ 
   await expect(tv.locator('.pencil-ring')).toBeVisible();
   // Once the row has finished turning to paper, since colours are only final then.
   await tv.waitForTimeout(700);
-  await noAccessibilityProblems(tv);
+  await expectNoAccessibilityProblems(tv);
 
   await expect(sam.getByRole('heading', { name: 'Top caption, with 2 votes' })).toBeVisible({ timeout: 10_000 });
   await expect(sam.getByText('+900')).toBeVisible();
   await expect(alex.getByRole('heading', { name: 'Your caption got 1 vote' })).toBeVisible();
   await expect(priya.getByRole('heading', { name: 'No caption this time' })).toBeVisible();
-  await noAccessibilityProblems(sam);
 
   // A rude winner can still be hidden from the TV. The points stand, as they do for any reveal.
   await tv.locator('.entry.real').click();

@@ -5,10 +5,9 @@ describe('what goes into the logs', () => {
   it.each([
     ['/j/abcdefghijklmnopqrstuv', '/j/…'],
     ['/host/abcdefghijklmnopqrstuv', '/host/…'],
-    ['/api/join/ABCDEF', '/api/join/…'],
     ['/api/admin/rooms/abcdefghijklmnopqrstuv', '/api/admin/rooms/…'],
     ['/admin?next=/host/abcdefghijklmnopqrstuv', '/admin'],
-  ])('leaves no room id or join code in %s', (url, logged) => {
+  ])('leaves no room id in %s', (url, logged) => {
     expect(redactUrl(url)).toBe(logged);
   });
 

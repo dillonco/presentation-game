@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { MAX_ANSWER_LENGTH } from '../../../shared/constants.js';
 import type {
   ActionReply,
@@ -15,6 +15,7 @@ import { GAME_NAMES, ordinal, roundName, roundPosition } from '../theme/games.js
 import { ActionButton, useLockedAction } from '../ui/ActionButton.js';
 import { OptionBox } from '../ui/OptionBox.js';
 import { PhotoThumb } from '../ui/Photo.js';
+import { useHeldUntil } from '../ui/reveal.js';
 import { StatusArea, type StatusContent } from '../ui/StatusArea.js';
 import { TimerStrip } from '../ui/TimerStrip.js';
 import { choiceStatus, useInstantChoice } from './useInstantChoice.js';
@@ -287,29 +288,26 @@ function resultLine(result: RoundResult): string {
   return 'Not this time';
 }
 
-export { ordinal };
-
-/** Waits for the TV before showing a guest's result, so phones don't spoil the reveal. */
-export function useHeldUntil(endsAt: number): boolean {
-  const [revealed, setRevealed] = useState(() => Date.now() >= endsAt);
-  useEffect(() => {
-    const wait = endsAt - Date.now();
-    if (wait <= 0) {
-      setRevealed(true);
-      return;
-    }
-    setRevealed(false);
-    const timer = window.setTimeout(() => setRevealed(true), wait);
-    return () => window.clearTimeout(timer);
-  }, [endsAt]);
-  return revealed;
+/** The card a phone rests on between turns, with two small facts along its foot. */
+export function WaitingCard({ foot, children }: { foot: [ReactNode, ReactNode]; children: ReactNode }) {
+  return (
+    <main className="sheet">
+      <div className="waiting">
+        <div className="waiting-main">{children}</div>
+        <div className="waiting-foot">
+          <span>{foot[0]}</span>
+          <span>{foot[1]}</span>
+        </div>
+      </div>
+    </main>
+  );
 }
 
-export function LookUp({ round, body }: { round: RoundInfo; body: string }) {
+export function LookUp({ kicker, body }: { kicker: string; body: string }) {
   return (
     <main className="sheet">
       <div className="notice">
-        <p className="kicker">{roundName(round)}</p>
+        <p className="kicker">{kicker}</p>
         <h1 className="notice-title">Look up at the TV</h1>
         <p className="notice-body">{body}</p>
       </div>
@@ -317,26 +315,45 @@ export function LookUp({ round, body }: { round: RoundInfo; body: string }) {
   );
 }
 
-export function RevealScreen({ screen, offset }: { screen: RevealScreenData; offset: number }) {
-  const revealed = useHeldUntil(screen.endsAt - offset);
-  const { round, result } = screen;
-  if (!revealed) {
-    return <LookUp round={round} body={round.game === 'caption' ? 'The votes are coming in.' : 'The answers are coming in.'} />;
-  }
+/** A round's result, held back until the TV has shown it so phones don't spoil the reveal. */
+export function RoundResult({
+  endsAt,
+  round,
+  waiting,
+  kicker,
+  line,
+  result,
+}: {
+  endsAt: number;
+  round: RoundInfo;
+  /** Said while the TV is still revealing. */
+  waiting: string;
+  kicker: string;
+  line: string;
+  result: { points: number; total: number; rank: number };
+}) {
+  if (!useHeldUntil(endsAt)) return <LookUp kicker={roundName(round)} body={waiting} />;
   return (
-    <main className="sheet">
-      <div className="waiting">
-        <div className="waiting-main">
-          <p className="kicker">{roundName(round)}</p>
-          <h1 className="notice-title">{round.game === 'caption' ? captionResultLine(result) : resultLine(result)}</h1>
-          <p className="result-points">+{result.points}</p>
-        </div>
-        <div className="waiting-foot">
-          <span>Total {result.total}</span>
-          <span>{ordinal(result.rank)} place</span>
-        </div>
-      </div>
-    </main>
+    <WaitingCard foot={[<>Total {result.total}</>, <>{ordinal(result.rank)} place</>]}>
+      <p className="kicker">{kicker}</p>
+      <h1 className="notice-title">{line}</h1>
+      <p className="result-points">+{result.points}</p>
+    </WaitingCard>
+  );
+}
+
+export function RevealScreen({ screen, offset }: { screen: RevealScreenData; offset: number }) {
+  const { round, result } = screen;
+  const caption = round.game === 'caption';
+  return (
+    <RoundResult
+      endsAt={screen.endsAt - offset}
+      round={round}
+      waiting={caption ? 'The votes are coming in.' : 'The answers are coming in.'}
+      kicker={roundName(round)}
+      line={caption ? captionResultLine(result) : resultLine(result)}
+      result={result}
+    />
   );
 }
 
@@ -352,19 +369,11 @@ export function RankScreen({
   playerCount: number;
 }) {
   return (
-    <main className="sheet">
-      <div className="waiting">
-        <div className="waiting-main">
-          <p className="kicker">{heading}</p>
-          <h1 className="waiting-name">{ordinal(rank)} place</h1>
-          <p className="result-points">{score}</p>
-        </div>
-        <div className="waiting-foot">
-          <span>Out of {playerCount}</span>
-          <span>Look up at the TV</span>
-        </div>
-      </div>
-    </main>
+    <WaitingCard foot={[<>Out of {playerCount}</>, 'Look up at the TV']}>
+      <p className="kicker">{heading}</p>
+      <h1 className="waiting-name">{ordinal(rank)} place</h1>
+      <p className="result-points">{score}</p>
+    </WaitingCard>
   );
 }
 
@@ -373,43 +382,25 @@ type FinalScreenData = Extract<GuestScreen, { kind: 'final' }>;
 /** Waits until this guest's place is on the TV, then shows it, with a medal for the top three. */
 export function FinalScreen({ screen, offset }: { screen: FinalScreenData; offset: number }) {
   const revealed = useHeldUntil(screen.landsAt - offset);
-  if (!revealed) {
-    return (
-      <main className="sheet">
-        <div className="notice">
-          <p className="kicker">Final standings</p>
-          <h1 className="notice-title">Look up at the TV</h1>
-          <p className="notice-body">Your place appears here once it's on the TV.</p>
-        </div>
-      </main>
-    );
-  }
+  if (!revealed) return <LookUp kicker="Final standings" body="Your place appears here once it's on the TV." />;
   const medal = screen.rank <= 3 ? screen.rank : null;
   return (
-    <main className="sheet">
-      <div className="waiting">
-        <div className="waiting-main">
-          <p className="kicker">Final standings</p>
-          {medal ? (
-            <p className={`medal medal-${medal}`} aria-hidden="true">
-              {medal}
-            </p>
-          ) : null}
-          {medal === 1 ? (
-            <p className="medal-winner">
-              <span lang="ja">優勝</span> Winner
-            </p>
-          ) : null}
-          <h1 className="waiting-name">{ordinal(screen.rank)} place</h1>
-          <p className="result-points">
-            {screen.score} <span className="result-unit">points</span>
-          </p>
-        </div>
-        <div className="waiting-foot">
-          <span>Out of {screen.playerCount}</span>
-          <span>Thanks for playing</span>
-        </div>
-      </div>
-    </main>
+    <WaitingCard foot={[<>Out of {screen.playerCount}</>, 'Thanks for playing']}>
+      <p className="kicker">Final standings</p>
+      {medal ? (
+        <p className={`medal medal-${medal}`} aria-hidden="true">
+          {medal}
+        </p>
+      ) : null}
+      {medal === 1 ? (
+        <p className="medal-winner">
+          <span lang="ja">優勝</span> Winner
+        </p>
+      ) : null}
+      <h1 className="waiting-name">{ordinal(screen.rank)} place</h1>
+      <p className="result-points">
+        {screen.score} <span className="result-unit">points</span>
+      </p>
+    </WaitingCard>
   );
 }

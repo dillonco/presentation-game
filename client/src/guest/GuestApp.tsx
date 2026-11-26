@@ -1,17 +1,27 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { MAX_NAME_LENGTH } from '../../../shared/constants.js';
 import type { ErrorCode, GuestView, JoinState, RejoinResult } from '../../../shared/protocol.js';
 import { safeStorage } from '../net/socket.js';
-import { answerName, GAME_NAMES, GAME_NUMERALS } from '../theme/games.js';
+import { answerName, GAME_NAMES, GAME_NUMERALS, roundName } from '../theme/games.js';
 import '../theme/components.css';
 import '../theme/phone.css';
 import { ActionButton, useLockedAction } from '../ui/ActionButton.js';
 import { useAccent } from '../ui/accent.js';
 import { PhoneShell } from '../ui/PhoneShell.js';
+import { usePreloadedMap } from '../map/lazy.js';
 import { StatusArea, type StatusContent } from '../ui/StatusArea.js';
 import { PickRevealScreen, PickScreen } from './ChoiceScreen.js';
 import { GuessScreen, PinRevealScreen } from './GuessScreen.js';
-import { FinalScreen, LookUp, RankScreen, RevealScreen, VoteScreen, WriteScreen, type RoundSession } from './RoundScreens.js';
+import {
+  FinalScreen,
+  LookUp,
+  RankScreen,
+  RevealScreen,
+  VoteScreen,
+  WaitingCard,
+  WriteScreen,
+  type RoundSession,
+} from './RoundScreens.js';
 import { TipsScreen } from './TipsScreen.js';
 import { useGuestSession, useKeepAwake } from './useGuestSession.js';
 import { APP_NAME } from '../appName.js';
@@ -136,26 +146,21 @@ function InGame({ view, session }: { view: GuestView; session: RoundSession }) {
   const { screen } = view;
   if (screen.kind === 'lobby') {
     return (
-      <main className="sheet">
-        <div className="waiting">
-          <div className="waiting-main">
-            <div className="waiting-stamp">
-              <span className="seal" aria-hidden="true">
-                済
-              </span>
-              <p className="locked-text">You're in</p>
-            </div>
-            <h1 className="waiting-name">{view.you.name}</h1>
-            <p className="notice-body">Watch the TV. The game starts soon.</p>
-          </div>
-          <div className="waiting-foot">
-            <span>{view.title}</span>
-            <span>
-              {view.playerCount} of {view.capacity} here
-            </span>
-          </div>
+      <WaitingCard foot={[
+          view.title,
+          <>
+            {view.playerCount} of {view.capacity} here
+          </>,
+        ]}>
+        <div className="waiting-stamp">
+          <span className="seal" aria-hidden="true">
+            済
+          </span>
+          <p className="locked-text">You're in</p>
         </div>
-      </main>
+        <h1 className="waiting-name">{view.you.name}</h1>
+        <p className="notice-body">Watch the TV. The game starts soon.</p>
+      </WaitingCard>
     );
   }
   if (screen.kind === 'title') {
@@ -175,7 +180,7 @@ function InGame({ view, session }: { view: GuestView; session: RoundSession }) {
   if (screen.kind === 'show') {
     return (
       <LookUp
-        round={screen.round}
+        kicker={roundName(screen.round)}
         body={`${answerName(screen.round)} ${screen.number} of ${screen.count}. You'll vote once they've all been shown.`}
       />
     );
@@ -191,7 +196,7 @@ function InGame({ view, session }: { view: GuestView; session: RoundSession }) {
   if (screen.kind === 'gallery') {
     return (
       <LookUp
-        round={screen.round}
+        kicker={roundName(screen.round)}
         body={`${screen.count === 1 ? 'One more photo' : `${screen.count} more photos`} from this one, on the TV.`}
       />
     );
@@ -210,15 +215,6 @@ function InGame({ view, session }: { view: GuestView; session: RoundSession }) {
   return <FinalScreen screen={screen} offset={session.offset} />;
 }
 
-/** Fetched quietly once a guest is in, so the map is ready before its game starts. */
-function usePreloadedMap(country: string | null): void {
-  useEffect(() => {
-    if (!country) return;
-    void import('../map/PinMap.js').catch(() => undefined);
-    void import('../map/outline.js').then((module) => module.loadOutline(country)).catch(() => undefined);
-  }, [country]);
-}
-
 const GONE: Record<'removed' | 'superseded' | 'ended' | 'missing', [string, string]> = {
   removed: ['You were removed from this game', 'Talk to the presenter if this is a mistake.'],
   superseded: ["You're playing on another phone", 'This phone is no longer in the game.'],
@@ -229,7 +225,8 @@ const GONE: Record<'removed' | 'superseded' | 'ended' | 'missing', [string, stri
 export default function GuestApp({ room }: { room: string }) {
   const { stage, online, offset, join, sendAnswer, sendVote, sendPin, sendPick } = useGuestSession(room);
   useKeepAwake(stage.stage === 'in');
-  usePreloadedMap(stage.stage === 'in' ? (stage.view.mapArea?.name ?? null) : null);
+  // Fetched quietly once a guest is in, so the map is ready before its game starts.
+  usePreloadedMap(stage.stage === 'in' ? stage.view.mapArea?.name : null, () => import('../map/PinMap.js'));
   const offline = !online && stage.stage !== 'connecting' && stage.stage !== 'gone';
   // A timed screen says this in its strip instead, so the banner never covers the clock.
   useAccent(stage.stage === 'in' ? stage.view.accent : null);

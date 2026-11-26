@@ -3,11 +3,9 @@
  * as pasted, plus when the clip starts and ends, so a half-typed link is never lost.
  */
 
-export const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 /** Long enough to say a phrase twice. A clip is there to hear the word, not to watch a video. */
 export const MAX_CLIP_SECONDS = 20;
-/** Times are kept to a tenth of a second, which is as close as anyone can hear. */
-export const CLIP_STEP = 0.1;
 /** Twelve hours, comfortably past any real video. */
 export const MAX_CLIP_TIME = 12 * 60 * 60;
 /** Where a new clip ends when only its start is known: about one word, said once. */

@@ -1,6 +1,8 @@
+import type { z } from 'zod';
 import type { AccentColours } from './color.js';
 import type { Country } from './countries.js';
 import type { Spot } from './geo.js';
+import type { hostCommandSchema } from './messages.js';
 import type { WordClip } from './youtube.js';
 /**
  * Types for everything sent between the server and clients.
@@ -9,8 +11,8 @@ import type { WordClip } from './youtube.js';
 
 export type GameType = 'define' | 'geo' | 'caption' | 'choice';
 
-export type LobbyScreen = { kind: 'lobby' };
-export type TitleScreen = { kind: 'title'; gameNumber: number; game: GameType };
+type LobbyScreen = { kind: 'lobby' };
+type TitleScreen = { kind: 'title'; gameNumber: number; game: GameType };
 
 /** All times are in the server's clock. Each device corrects for its own difference. */
 export interface TimerView {
@@ -22,7 +24,7 @@ export interface TimerView {
    * The presenter ended this stage early. Phones send what's on screen straight away rather
    * than by their own clock, which may be a little off, so nothing misses the grace period.
    */
-  cutShort?: boolean;
+  cutShort: boolean;
 }
 
 export interface RoundInfo {
@@ -162,7 +164,7 @@ export interface RoundResult {
   rank: number;
 }
 
-export interface PinRoundResult {
+interface PinRoundResult {
   /** Null when this guest didn't place a pin. */
   km: number | null;
   points: number;
@@ -221,7 +223,7 @@ export interface HostPlayer {
   leftPage: boolean;
 }
 
-export interface RejoinPrompt {
+interface RejoinPrompt {
   id: string;
   name: string;
 }
@@ -232,8 +234,6 @@ export interface HostView {
   version: number;
   roomId: string;
   title: string;
-  /** Guests can type this on the home page to join, on a hosted server. */
-  joinCode: string | null;
   accent: AccentColours | null;
   screen: HostScreen;
   screenId: number;
@@ -312,25 +312,9 @@ export type TimeReply = { ok: true; now: number } | Failure;
 /** Includes the guest's fresh view, so the phone never shows a moment of old state. */
 export type ActionReply = { ok: true; view: GuestView } | (Failure & { view?: GuestView });
 
-export type HostCommand =
-  /** Names the screen it was pressed on, so a double press can't skip one. */
-  | { type: 'next'; screenId: number }
-  | { type: 'skipTimer'; screenId: number }
-  | { type: 'addTime'; screenId: number }
-  /** States the wanted value rather than toggling, so a double press changes nothing extra. */
-  | { type: 'setPaused'; paused: boolean }
-  | { type: 'setJoinLocked'; locked: boolean }
-  | { type: 'remove'; playerId: string }
-  | { type: 'hideEntry'; entryId: string }
-  | { type: 'answerRejoin'; requestId: string; approve: boolean };
+export type HostCommand = z.infer<typeof hostCommandSchema>;
 
 export type RejoinResult = 'approved' | 'denied' | 'expired' | 'cancelled';
 export type KickReason = 'removed' | 'superseded';
 /** Why a connection was let go: a kick, or `ended` when the presenter deleted the whole game. */
 export type GoneReason = KickReason | 'ended';
-
-export interface ServerToClient {
-  view: (view: HostView | GuestView) => void;
-  'rejoin:result': (result: RejoinResult) => void;
-  kicked: (reason: GoneReason) => void;
-}

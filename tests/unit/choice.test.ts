@@ -21,8 +21,8 @@ describe('a Pick one round', () => {
     const round = choiceRound();
     round.pick('a', 2);
     round.pick('a', 0);
-    expect(round.pickOf('a')).toBe(0);
-    expect(round.pickedIds()).toEqual(['a']);
+    expect(round.guessOf('a')).toBe(0);
+    expect(round.guessedIds()).toEqual(['a']);
   });
 
   it('refuses an answer that is not on the list, and leaves the old one', () => {
@@ -30,7 +30,7 @@ describe('a Pick one round', () => {
     round.pick('a', 1);
     expect(round.pick('a', 4)).toEqual({ ok: false, code: 'not_found' });
     expect(round.pick('a', -1)).toEqual({ ok: false, code: 'not_found' });
-    expect(round.pickOf('a')).toBe(1);
+    expect(round.guessOf('a')).toBe(1);
   });
 
   it('ignores repeats and older messages', () => {
@@ -38,7 +38,7 @@ describe('a Pick one round', () => {
     const pick = (seq: number, option: number) => round.act('a', seq, () => round.pick('a', option));
     expect(pick(2, 1)).toEqual({ ok: true });
     expect(pick(2, 3)).toEqual({ ok: true });
-    expect(round.pickOf('a')).toBe(1);
+    expect(round.guessOf('a')).toBe(1);
     expect(pick(1, 3)).toEqual({ ok: false, code: 'stale_action' });
     expect(round.lastSeq('a')).toBe(2);
   });

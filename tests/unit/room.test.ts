@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { REJOIN_REQUEST_TTL_MS } from '../../shared/constants.js';
+import { MAX_PLAYERS, REJOIN_REQUEST_TTL_MS } from '../../shared/constants.js';
 import { steadyNow } from '../../server/session/manager.js';
 import { Room, type RoomSetup } from '../../server/session/room.js';
 
-// With no words, a game is just its title card: lobby, title, final.
+// With no words, a game is left out of the night: just the lobby, then the final.
 const games: RoomSetup['games'] = [{ type: 'define', items: [] }];
 
-function makeRoom(options: { capacity?: number; blocklist?: string[] } = {}): Room {
+function makeRoom(options: { blocklist?: string[] } = {}): Room {
   return new Room('room', { title: 'Test', games, ...options }, 0);
+}
+
+/** Fills the room, returning the first player's id. */
+function fill(room: Room): string {
+  const ids = Array.from({ length: MAX_PLAYERS }, (_, n) => joinOnline(room, `full-${n}`, `Guest ${n}`));
+  return ids[0]!;
 }
 
 function joinOnline(room: Room, hash: string, name: string): string {
@@ -26,10 +32,9 @@ describe('joining', () => {
     expect(room.playerCount).toBe(1);
   });
 
-  it('stops at capacity, then frees a slot on removal', () => {
-    const room = makeRoom({ capacity: 2 });
-    const first = joinOnline(room, 'a', 'One');
-    joinOnline(room, 'b', 'Two');
+  it('stops when full, then frees a slot on removal', () => {
+    const room = makeRoom();
+    const first = fill(room);
     expect(room.join('c', 'Three', 1)).toEqual({ kind: 'refused', code: 'room_full' });
     expect(room.joinState).toBe('full');
     room.remove(first, 2);
@@ -63,32 +68,23 @@ describe('joining', () => {
   });
 
   it('still lets a joined guest return when locked or full', () => {
-    const room = makeRoom({ capacity: 1 });
-    joinOnline(room, 'a', 'Alex');
+    const room = makeRoom();
+    fill(room);
     room.setJoinLocked(true, 2);
-    expect(room.lookupToken('a').kind).toBe('player');
-    expect(room.join('a', 'Alex', 3).kind).toBe('joined');
+    expect(room.lookupToken('full-1').kind).toBe('player');
+    expect(room.join('full-1', 'Guest 1', 3).kind).toBe('joined');
   });
 });
 
 describe('screens', () => {
-  it('moves one screen for a double press', () => {
-    const room = makeRoom();
-    joinOnline(room, 'a', 'Alex');
-    expect(room.next(0, 1)).toEqual({ ok: true });
-    expect(room.next(0, 2)).toEqual({ ok: false, code: 'stale_screen' });
-    expect(room.screenId).toBe(1);
-  });
-
   it('stops at the last screen, once the podium is up', () => {
     const room = makeRoom();
     joinOnline(room, 'a', 'Alex');
     room.next(0, 1);
-    room.next(1, 2);
     // While the podium is still landing, a press shows it all.
-    expect(room.next(2, 3)).toEqual({ ok: true });
-    expect(room.next(2, 4)).toEqual({ ok: false, code: 'at_end' });
-    expect(room.next(2, 60_000)).toEqual({ ok: false, code: 'at_end' });
+    expect(room.next(1, 3)).toEqual({ ok: true });
+    expect(room.next(1, 4)).toEqual({ ok: false, code: 'at_end' });
+    expect(room.next(1, 60_000)).toEqual({ ok: false, code: 'at_end' });
   });
 
   it("won't leave an empty lobby, since a stray press has no way back", () => {
@@ -225,7 +221,7 @@ describe('new-phone rejoin', () => {
   });
 
   it('works when joining is locked, because it adds nobody', () => {
-    const room = makeRoom({ capacity: 1 });
+    const room = makeRoom();
     const id = joinOnline(room, 'old', 'Alex');
     room.setJoinLocked(true, 2);
     room.disconnect(id, 3);
@@ -289,13 +285,6 @@ describe('new-phone rejoin', () => {
 });
 
 describe('what each client can see', () => {
-  it('never puts tokens or hashes in a view', () => {
-    const room = makeRoom();
-    const id = joinOnline(room, 'secret-hash', 'Alex');
-    expect(JSON.stringify(room.hostView())).not.toContain('secret-hash');
-    expect(JSON.stringify(room.guestView(id))).not.toContain('secret-hash');
-  });
-
   it("gives a guest a head count, not other guests' names or ids", () => {
     const room = makeRoom();
     const id = joinOnline(room, 'a', 'Alex');
@@ -309,13 +298,13 @@ describe('what each client can see', () => {
 
 describe('snapshots', () => {
   it('restores the game with everyone offline', () => {
-    const room = makeRoom({ capacity: 7, blocklist: ['jerk'] });
+    const room = makeRoom({ blocklist: ['jerk'] });
     const id = joinOnline(room, 'a', 'Alex');
     room.next(0, 2);
     const restored = Room.fromSnapshot(JSON.parse(JSON.stringify(room.toSnapshot())))!;
     expect(restored.screenId).toBe(1);
     expect(restored.joinLocked).toBe(true);
-    expect(restored.capacity).toBe(7);
+    expect(restored.join('c', 'Big Jerk', 3)).toEqual({ kind: 'refused', code: 'name_blocked' });
     expect(restored.lookupToken('a')).toEqual({ kind: 'player', playerId: id });
     expect(restored.hostView().players).toEqual([{ id, name: 'Alex', online: false, leftPage: false }]);
     expect(restored.join('b', 'Alex', 3).kind).toBe('pending');

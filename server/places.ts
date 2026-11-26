@@ -4,7 +4,7 @@ import { cleanName } from '../shared/names.js';
 const MAX_HOPS = 4;
 const HOP_TIMEOUT_MS = 5000;
 
-export type PlaceLookup = { ok: true; place: TipPlace } | { ok: false; error: 'not_a_map_link' | 'place_not_found' };
+type PlaceLookup = { ok: true; place: TipPlace } | { ok: false; error: 'not_a_map_link' | 'place_not_found' };
 
 function isShortLink(url: URL): boolean {
   return url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl';

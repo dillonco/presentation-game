@@ -1,43 +1,19 @@
-import { readFileSync } from 'node:fs';
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { closeEverything, failOnPageErrors, joinAs, newContext, openPhone } from './helpers.js';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  closeEverything,
+  expectNoAccessibilityProblems,
+  FIXTURES,
+  joinAs,
+  makeDeck,
+  openPhone,
+  press,
+  signIn,
+  startGame,
+  toRound,
+  upload,
+} from './helpers.js';
 
 test.afterEach(closeEverything);
-
-const FIXTURES = 'tests/fixtures';
-
-async function signIn(browser: Browser): Promise<{ page: Page; context: BrowserContext }> {
-  const context = await newContext(browser, { viewport: { width: 1920, height: 1080 } });
-  const page = await context.newPage();
-  failOnPageErrors(page);
-  await page.goto('/admin');
-  await page.getByLabel('Password').fill('e2e-test-password');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.getByRole('heading', { name: 'Your decks' }).waitFor();
-  return { page, context };
-}
-
-async function upload(context: BrowserContext, file: string): Promise<string> {
-  const response = await context.request.post('/api/admin/images', {
-    headers: { 'content-type': 'image/jpeg' },
-    data: readFileSync(`${FIXTURES}/${file}`),
-  });
-  return ((await response.json()) as { id: string }).id;
-}
-
-async function makeDeck(context: BrowserContext, games: unknown[]): Promise<string> {
-  const response = await context.request.post('/api/admin/decks', {
-    data: {
-      title: 'Trip extras',
-      theme: { accent: null },
-      region: { country: 'Japan' },
-      moderation: { blocklist: [], similarity: 'normal', showLeftPage: true },
-      games,
-    },
-  });
-  return ((await response.json()) as { deck: { id: string } }).deck.id;
-}
 
 async function savedExtras(page: Page, deckId: string): Promise<string[] | undefined> {
   return page.evaluate(async (id) => {
@@ -47,15 +23,10 @@ async function savedExtras(page: Page, deckId: string): Promise<string[] | undef
   }, deckId);
 }
 
-async function press(tv: Page, key: string): Promise<void> {
-  await tv.waitForTimeout(550);
-  await tv.keyboard.press(key);
-}
-
 test('the deck builder adds and removes more photos for after a reveal', async ({ browser }) => {
   const { page, context } = await signIn(browser);
-  const image = await upload(context, 'plain.jpg');
-  const deckId = await makeDeck(context, [{ type: 'caption', settings: {}, items: [{ image }] }]);
+  const image = await upload(context);
+  const deckId = await makeDeck(context, { games: [{ type: 'caption', settings: {}, items: [{ image }] }] });
   await page.goto(`/admin/decks/${deckId}`);
   await page.getByText('Saved', { exact: true }).waitFor();
 
@@ -72,25 +43,15 @@ test('the deck builder adds and removes more photos for after a reveal', async (
 });
 
 test('after the winning caption, the TV shows the extra photos and phones point to it', async ({ browser }, testInfo) => {
-  const { page: tv, context } = await signIn(browser);
-  const [image, first, second] = await Promise.all([
-    upload(context, 'plain.jpg'),
-    upload(context, 'sideways.jpg'),
-    upload(context, 'gps.jpg'),
-  ]);
-  const deckId = await makeDeck(context, [{ type: 'caption', settings: {}, items: [{ image, extras: [first, second] }] }]);
-  const started = await context.request.post('/api/admin/rooms', { data: { deckId } });
-  const { id: room } = (await started.json()) as { id: string };
-  await tv.goto(`/host/${room}`);
-  await tv.getByText('Scan to join').waitFor();
+  const { tv, room } = await startGame(browser, async (image, context) => {
+    const extras = await Promise.all([upload(context, 'sideways.jpg'), upload(context, 'gps.jpg')]);
+    return [{ type: 'caption', settings: {}, items: [{ image, extras }] }];
+  });
 
   const phone = await openPhone(browser, room);
   await joinAs(phone, 'Aiko');
 
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Caption this' }).waitFor();
-  await press(tv, 'Space');
-  await tv.getByRole('heading', { name: 'Write your best caption' }).waitFor();
+  await toRound(tv, 'Caption this', 'Write your best caption');
   // Nobody writes, so time's up goes straight to the result.
   await press(tv, 's');
   await press(tv, 's');
@@ -104,8 +65,7 @@ test('after the winning caption, the TV shows the extra photos and phones point 
   await expect(phone.getByText('2 more photos from this one, on the TV.')).toBeVisible();
   await tv.waitForTimeout(1000);
   await tv.screenshot({ path: testInfo.outputPath('gallery.png') });
-  const results = await new AxeBuilder({ page: tv }).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
+  await expectNoAccessibilityProblems(tv);
 
   // A click fills the screen with one, the arrows step through, and Escape goes back.
   await photos.first().click();

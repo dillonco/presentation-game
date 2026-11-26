@@ -16,7 +16,7 @@ const EARTH_RADIUS_KM = 6371;
 const KM_PER_DEGREE_LAT = 110.57;
 const KM_PER_DEGREE_LNG = 111.32;
 /** How far off the outline a pin still counts, so coastal and small-island guesses work. */
-export const OUTLINE_TOLERANCE_KM = 20;
+const OUTLINE_TOLERANCE_KM = 20;
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 

@@ -1,4 +1,4 @@
-import { MAX_ANSWER_LENGTH, MAX_NAME_LENGTH } from './constants.js';
+import { MAX_NAME_LENGTH } from './constants.js';
 
 // Characters that draw nothing but aren't classed as format characters by Unicode.
 const BLANK_LOOKALIKES = /[ᅟᅠ឴឵᠎⠀ㅤﾠ]/gu;
@@ -14,8 +14,6 @@ const CONFUSABLES: Record<string, string> = {
   α: 'a', β: 'b', ε: 'e', η: 'n', ι: 'i', κ: 'k', μ: 'm', ν: 'v', ο: 'o', ρ: 'p', τ: 't', υ: 'u', χ: 'x', ω: 'w',
 };
 
-export type NameProblem = 'empty' | 'too_long';
-
 /** The version of a name that gets stored and displayed. */
 export function cleanName(raw: string): string {
   return raw
@@ -30,16 +28,11 @@ export function cleanName(raw: string): string {
     .trim();
 }
 
-export function nameProblem(cleaned: string): NameProblem | null {
+/** What's wrong with a cleaned name or answer, if anything. */
+export function textProblem(cleaned: string, max = MAX_NAME_LENGTH): 'empty' | 'too_long' | null {
   if (!VISIBLE_CONTENT.test(cleaned)) return 'empty';
   // Counts characters rather than UTF-16 units, so an emoji counts once.
-  if (Array.from(cleaned).length > MAX_NAME_LENGTH) return 'too_long';
-  return null;
-}
-
-export function answerProblem(cleaned: string): NameProblem | null {
-  if (!VISIBLE_CONTENT.test(cleaned)) return 'empty';
-  if (Array.from(cleaned).length > MAX_ANSWER_LENGTH) return 'too_long';
+  if (Array.from(cleaned).length > max) return 'too_long';
   return null;
 }
 

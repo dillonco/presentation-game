@@ -24,12 +24,8 @@ const QUESTIONS = [
   },
 ] as const;
 
-/** How many photos one copy of the sample adds, for a hosted space's limit. */
-export const SAMPLE_PHOTO_COUNT = PLACES.length + CAPTIONS.length + QUESTIONS.length;
-
-async function addPhoto(media: MediaStore, space: string, file: string): Promise<string> {
+async function addPhoto(media: MediaStore, file: string): Promise<string> {
   const id = newImageId();
-  let bytes = 0;
   for (const [variant, name] of [
     ['full', `${file}.jpg`],
     ['small', `${file}.small.jpg`],
@@ -37,9 +33,7 @@ async function addPhoto(media: MediaStore, space: string, file: string): Promise
     const clean = cleanJpeg(await readFile(new URL(name, FOLDER)));
     if (!clean) throw new Error(`Sample photo ${name} isn't a complete JPEG`);
     await media.save(id, variant, clean.body);
-    bytes += clean.body.length;
   }
-  await media.claim(space, id, bytes);
   return id;
 }
 
@@ -49,16 +43,16 @@ async function addPhoto(media: MediaStore, space: string, file: string): Promise
  * Each copy gets photos with fresh random ids, so nothing about a photo's address hints at the place,
  * and deleting one copy never takes photos from another.
  */
-export async function sampleDeckWithPhotos(media: MediaStore, space: string): Promise<DeckContent> {
+export async function sampleDeckWithPhotos(media: MediaStore): Promise<DeckContent> {
   const geo: GeoGame = { type: 'geo', settings: {}, items: [] };
   for (const place of PLACES) {
-    geo.items.push({ image: await addPhoto(media, space, place.file), label: place.label, lat: place.lat, lng: place.lng });
+    geo.items.push({ image: await addPhoto(media, place.file), label: place.label, lat: place.lat, lng: place.lng });
   }
   const caption: CaptionGame = { type: 'caption', settings: {}, items: [] };
-  for (const file of CAPTIONS) caption.items.push({ image: await addPhoto(media, space, file) });
+  for (const file of CAPTIONS) caption.items.push({ image: await addPhoto(media, file) });
   const choice: ChoiceGame = { type: 'choice', settings: {}, items: [] };
   for (const { file, question, options } of QUESTIONS) {
-    choice.items.push({ image: await addPhoto(media, space, file), question, options: [...options], answer: 0 });
+    choice.items.push({ image: await addPhoto(media, file), question, options: [...options], answer: 0 });
   }
 
   const words = sampleDeck();

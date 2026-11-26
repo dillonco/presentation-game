@@ -154,7 +154,6 @@ describe('when the TV plays its sounds', () => {
     role: 'host',
     version: 1,
     roomId: 'r',
-    joinCode: null,
     title: 'T',
     accent: null,
     screen,
@@ -170,7 +169,7 @@ describe('when the TV plays its sounds', () => {
 
   it('ticks the last five seconds and sounds time up, but not while paused', async () => {
     const { plannedCues } = await import('../../client/src/host/useSoundCues.js');
-    const timer = { endsAt: 60_000, totalMs: 60_000, pausedRemainingMs: null };
+    const timer = { endsAt: 60_000, totalMs: 60_000, pausedRemainingMs: null, cutShort: false };
     const cues = plannedCues(view({ kind: 'write', round, timer, doneIds: [] }), 1000);
     expect(cues.map((cue) => [cue.cue, cue.at])).toEqual([
       ['tick', 54_000],
